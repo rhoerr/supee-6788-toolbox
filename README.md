@@ -16,6 +16,8 @@ If you need help, give us a line.
 * **To analyze:** Run from SSH: php -f fixSUPEE6788.php -- analyze
 * **To apply changes:** Run from SSH: php -f fixSUPEE6788.php -- fix
 
+Additional options recordAffected and loadWhitelists are detailed in the script help.
+
 All results are output to screen and to var/log/fixSUPEE6788.log.
 
 ## Caveats
@@ -26,7 +28,6 @@ All results are output to screen and to var/log/fixSUPEE6788.log.
 ## Potential improvements
 * Whitelist for files or modules the extension should not touch.
 * Ability to flag extensions known to be affected by the SQL vulnerability or other changes, or otherwise detect it.
-* Add whitelist of files/modules to not touch.
 * Load whitelist entries for analysis from the actual whitelist. (Need details on how they're stored to do this.)
 * Add any missing cache/block whitelist entries to the whitelist. (Need details on how they're stored to do this.)
 

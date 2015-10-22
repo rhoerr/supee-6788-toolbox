@@ -47,21 +47,11 @@ class Mage_Shell_PatchClass extends Mage_Shell_Abstract
 		'core'
 	);
 	
-	protected $_whitelist = array(
+	protected $_moduleWhitelist = array(
 		'Mage_Adminhtml', // Don't try to fix Mage_Adminhtml
 	);
 	
-	/**
-	 * Initialize
-	 * 
-	 * @return void
-	 */
-	public function __construct()
-	{
-		parent::__construct();
-		
-		$this->_findModules();
-	}
+	protected $_fileWhitelist = array();
 	
 	/**
 	 * Apply PHP settings to shell script
@@ -99,6 +89,14 @@ class Mage_Shell_PatchClass extends Mage_Shell_Abstract
 			static::log('---- SUPEE-6788 Developer Toolbox ---------------------------------');
 			static::log('  https://github.com/rhoerr/supee-6788-toolbox');
 			static::log('  Time: ' . date('c'));
+			
+			if( isset( $this->_args['loadWhitelists'] ) ) {
+				static::log('---- Loading whitelists -------------------------------------------');
+				$this->_loadWhitelistsFromFile();
+			}
+			
+			$this->_findModules();
+			
 			static::log('---- Searching config for bad routers -----------------------------');
 			
 			$configAffectedModules	= $this->_fixBadAdminhtmlRouter( $dryRun );
@@ -137,26 +135,61 @@ class Mage_Shell_PatchClass extends Mage_Shell_Abstract
 			}
 		}
 		else {
-            echo $this->usageHelp();
+			echo $this->usageHelp();
 		}
 	}
 
-    /**
-     * Retrieve Usage Help Message
-     * 
-     * @return void
-     */
-    public function usageHelp()
-    {
-        return <<<USAGE
+	/**
+	 * Retrieve Usage Help Message
+	 * 
+	 * @return void
+	 */
+	public function usageHelp()
+	{
+		return <<<USAGE
 Usage:  php -f fixSUPEE6788.php -- [options]
   analyze           Analyze Magento install for SUPEE-6788 conflicts
   fix               Apply the automated fixes as found by analyze
   recordAffected    If given, affected will be written to var/log/fixSUPEE6788-modules.log and var/log/fixSUPEE6788-files.log for other uses.
+  loadWhitelists    If given, shell/fixSUPEE6788-whitelist-modules.log and shell/fixSUPEE6788-whitelist-files.log will be loaded and excluded from any changes. Format same as recordAffected output.
   help              This help
 
 USAGE;
-    }
+	}
+	
+	/**
+	 * Load whitelisted modules/files in that should not be modified during fixes.
+	 * 
+	 * @return $this
+	 */
+	protected function _loadWhitelistsFromFile()
+	{
+		$path = substr( Mage::getBaseDir('skin'), 0, -4 ) . 'shell' . DS;
+		
+		// Load shell/fixSUPEE6788-whitelist-modules.log into array
+		if( is_file( $path . 'fixSUPEE6788-whitelist-modules.log' ) ) {
+			$modules = file_get_contents( $path . 'fixSUPEE6788-whitelist-modules.log' );
+			if( $modules !== false ) {
+				$modules = explode( "\n", $modules );
+				$modules = array_filter( $modules );
+				foreach( $modules as $module ) {
+					$this->_moduleWhitelist[] = $module;
+				}
+			}
+		}
+		
+		// Load shell/fixSUPEE6788-whitelist-files.log into array
+		if( is_file( $path . 'fixSUPEE6788-whitelist-files.log' ) ) {
+			$files = file_get_contents( $path . 'fixSUPEE6788-whitelist-files.log' );
+			if( $files !== false ) {
+				$files = explode( "\n", $files );
+				$files = array_filter( $files );
+				foreach( $files as $file ) {
+					$this->_fileWhitelist[] = $file;
+				}
+			}
+		}
+	}
 	
 	/**
 	 * Find modules/configuration affected by the admin controller issue.
@@ -173,6 +206,11 @@ USAGE;
 		 */
 		foreach( $this->_modules as $name => $modulePath ) {
 			$configPath = $modulePath . DS . 'etc' . DS . 'config.xml';
+			
+			// Skip any whitelisted files.
+			if( in_array( $configPath, $this->_fileWhitelist ) ) {
+				continue;
+			}
 			
 			if( is_file( $configPath ) ) {
 				$config		= file_get_contents( $configPath );
@@ -282,6 +320,11 @@ XML;
 			$tmpControllerPath	= $modulePath . DS. 'controllers' . DS . 'Adminhtmltmp';
 			$newControllerPath	= $controllerPath . DS . $addedRoute;
 			
+			// Skip any whitelisted files.
+			if( in_array( $controllerPath, $this->_fileWhitelist ) ) {
+				continue;
+			}
+			
 			if( is_dir( $newControllerPath ) ) {
 				static::log( sprintf( '%s already exists! Skipping.', $newControllerPath ) );
 				continue;
@@ -299,6 +342,8 @@ XML;
 				if( rename( $controllerPath, $tmpControllerPath ) === true ) {
 					if( mkdir( $controllerPath ) === true ) {
 						if( rename( $tmpControllerPath, $newControllerPath ) === true ) {
+							$this->_modifiedFiles[] = $controllerPath;
+							
 							static::log( sprintf( 'Moved %s to %s', $controllerPath, $newControllerPath ) );
 						}
 						else {
@@ -317,6 +362,8 @@ XML;
 				}
 			}
 			else {
+				$this->_modifiedFiles[] = $controllerPath;
+				
 				static::log( sprintf( 'Would move %s to %s', $controllerPath, $newControllerPath ) );
 			}
 			
@@ -371,6 +418,11 @@ XML;
 			foreach( $files as $file => $object ) {
 				// Skip any non-PHP/XML/PHTML files.
 				if( strrpos( $file, '.php' ) === false && strrpos( $file, '.xml' ) === false && strrpos( $file, '.phtml' ) === false ) {
+					continue;
+				}
+				
+				// Skip any whitelisted files.
+				if( in_array( $file, $this->_fileWhitelist ) ) {
 					continue;
 				}
 				
@@ -438,8 +490,11 @@ XML;
 		
 		$modules = Mage::getConfig()->getNode('modules')->children();
 		foreach( $modules as $name => $settings ) {
-			if( !in_array( $name, $this->_whitelist ) ) {
-				$this->_modules[ $name ] = Mage::getModuleDir( '', $name );
+			$dir = Mage::getModuleDir( '', $name );
+			
+			// Skip any whitelisted modules.
+			if( !in_array( $name, $this->_moduleWhitelist ) && !in_array( $dir, $this->_moduleWhitelist ) ) {
+				$this->_modules[ $name ] = $dir;
 			}
 		}
 	}
