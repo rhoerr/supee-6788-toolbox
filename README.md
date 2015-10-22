@@ -21,18 +21,12 @@ All results are output to screen and to var/log/fixSUPEE6788.log.
 ## Caveats
 * Assumes admin controllers are all located within {module}/controllers/Adminhtml. Convention, but not always true.
 * Will not handle multiple admin routes in a single module.
-* Will not correct bad routes in adminhtml layout/templates.
 * May not catch all possible route formats.
-* Will not reorganize any controller files.
-* Changing the admin routers in this way can cause conflicts between some extensions and core Adminhtml controllers.
 
 ## Potential improvements
 * Whitelist for files or modules the extension should not touch.
 * Ability to flag extensions known to be affected by the SQL vulnerability or other changes, or otherwise detect it.
-* Fix layout and template admin route references.
-* Move admin controllers to avoid potential controller conflicts, or detect and warn when such conflicts occur.
 * Add whitelist of files/modules to not touch.
-* Scan and fix paths and layout handles in app/design/adminhtml.
 * Load whitelist entries for analysis from the actual whitelist. (Need details on how they're stored to do this.)
 * Add any missing cache/block whitelist entries to the whitelist. (Need details on how they're stored to do this.)
 

@@ -37,7 +37,9 @@ require_once 'abstract.php';
 class Mage_Shell_PatchClass extends Mage_Shell_Abstract
 {
 	protected $_modules;
-	protected $_modifiedFiles = array();
+	protected $_modifiedFiles		= array();
+	protected $_fileReplacePatterns	= array();
+	public static $_errors			= array();
 	
 	protected $_codePools = array(
 		'local',
@@ -51,6 +53,8 @@ class Mage_Shell_PatchClass extends Mage_Shell_Abstract
 	
 	/**
 	 * Initialize
+	 * 
+	 * @return void
 	 */
 	public function __construct()
 	{
@@ -61,6 +65,8 @@ class Mage_Shell_PatchClass extends Mage_Shell_Abstract
 	
 	/**
 	 * Apply PHP settings to shell script
+	 * 
+	 * @return void
 	 */
 	protected function _applyPhpVariables()
 	{
@@ -89,20 +95,43 @@ class Mage_Shell_PatchClass extends Mage_Shell_Abstract
 		}
 		
 		if( !is_null( $dryRun ) ) {
+			static::log('-------------------------------------------------------------------');
+			static::log('---- SUPEE-6788 Developer Toolbox ---------------------------------');
+			static::log('  https://github.com/rhoerr/supee-6788-toolbox');
+			static::log('  Time: ' . date('c'));
 			static::log('---- Searching config for bad routers -----------------------------');
+			
 			$configAffectedModules	= $this->_fixBadAdminhtmlRouter( $dryRun );
 			
+			static::log('---- Moving controllers for bad routers to avoid conflicts --------');
+			$this->_moveAdminControllers( $configAffectedModules, $dryRun );
+			
 			static::log('---- Searching files for bad routes -------------------------------');
-			$routesAffectedFiles	= $this->_fixBadAdminRoutes( $configAffectedModules );
+			$this->_fixBadAdminRoutes( $dryRun );
 			
 			static::log('---- Searching for whitelist problems -----------------------------');
 			$whitelist = new TemplateVars();
 			$whitelist->execute();
 			
-			if( isset( $this->_args['summarize'] ) ) {
-				static::log('---- Summary ------------------------------------------------------');
-				static::log('Summary:');
-				static::log( sprintf( "Affected Modules:\n%s", implode( "\n", $configAffectedModules ) ) );
+			static::log('---- Summary ------------------------------------------------------');
+			static::log( sprintf( "Affected Modules:\n  %s", implode( "\n  ", $configAffectedModules ) ) );
+			static::log( sprintf( "Replace Patterns: %s", print_r( $this->_fileReplacePatterns, 1 ) ) );
+			static::log( sprintf( "Corrected Files:\n  %s", implode( "\n  ", $this->_modifiedFiles ) ) );
+			static::log( sprintf( "Errors:\n  %s", implode( "\n  ", static::$_errors ) ) );
+			static::log('See var/log/fixSUPEE6788.log for a record of all results.');
+			
+			if( isset( $this->_args['recordAffected'] ) ) {
+				file_put_contents(
+					Mage::getBaseDir('var') . DS . 'log' . DS . 'fixSUPEE6788-modules.log',
+					implode( "\n", $configAffectedModules )
+				);
+				static::log('Wrote affected modules to var/log/fixSUPEE6788-modules.log');
+				
+				file_put_contents(
+					Mage::getBaseDir('var') . DS . 'log' . DS . 'fixSUPEE6788-files.log',
+					implode( "\n", $this->_modifiedFiles )
+				);
+				static::log('Wrote affected files to var/log/fixSUPEE6788-files.log');
 			}
 		}
 		else {
@@ -112,15 +141,17 @@ class Mage_Shell_PatchClass extends Mage_Shell_Abstract
 
     /**
      * Retrieve Usage Help Message
+     * 
+     * @return void
      */
     public function usageHelp()
     {
         return <<<USAGE
 Usage:  php -f fixSUPEE6788.php -- [options]
-  analyze       Analyze Magento install for SUPEE-6788 conflicts
-  fix           Apply the automated fixes as found by analyze
-  summarize     Include a summary of affected files and changes
-  help          This help
+  analyze           Analyze Magento install for SUPEE-6788 conflicts
+  fix               Apply the automated fixes as found by analyze
+  recordAffected    If given, affected will be written to var/log/fixSUPEE6788-modules.log and var/log/fixSUPEE6788-files.log for other uses.
+  help              This help
 
 USAGE;
     }
@@ -135,6 +166,9 @@ USAGE;
 	{
 		$affected = array();
 		
+		/**
+		 * Go through each module, checking its config.xml for a bad admin router.
+		 */
 		foreach( $this->_modules as $name => $modulePath ) {
 			$configPath = $modulePath . DS . 'etc' . DS . 'config.xml';
 			
@@ -142,32 +176,40 @@ USAGE;
 				$config		= file_get_contents( $configPath );
 				$match		= strpos( $config, '<use>admin</use>' );
 				
-				if( $match !== FALSE ) {
-					static::log( sprintf( 'Found affected admin controller: %s', $configPath ) );
+				if( $match !== false ) {
+					static::log( sprintf( 'Found affected module config.xml: %s', $name ) );
 					
 					/**
 					 * Attempt to locate the complete route tag for replacement.
 					 * String operations are messy, but it would be difficult to cover all possible cases otherwise.
 					 */
+					
 					// Get route starting tag and position
 					$routeStartingTag		= strrpos( substr( $config, 0, $match ), '<' );
 					$routeStartingTagClose	= strpos( $config, '>', $routeStartingTag );
 					
 					$routeTag				= substr( $config, $routeStartingTag+1, ($routeStartingTagClose - $routeStartingTag - 1) );
 					$affected[ $routeTag ]	= $modulePath;
-					static::log( sprintf( 'Found route tag "%s" at %s.', $routeTag, $routeStartingTag ) );
 					
 					// Get route ending tag position and the full block
 					$routeEndingTag			= strpos( $config, '</' . $routeTag .'>', $routeStartingTag );
 					$routeLength			= $routeEndingTag - $routeStartingTag + strlen( $routeTag ) + 3;
 					$originalXml			= substr( $config, $routeStartingTag, $routeLength );
-					static::log( sprintf( "Found route tag-end at %s. Original route XML:\n%s", $routeEndingTag, $originalXml ) );
+					static::log( sprintf( "Found route tag '%s' at %s, ending at %s. Original route XML:\n%s", $routeTag, $routeStartingTag, $routeEndingTag, $originalXml ) );
 					
 					// Get the module value
 					$module					= null;
 					preg_match( '/<module>(.*)<\/module>/', $originalXml, $module );
 					$module					= isset( $module[1] ) ? $module[1] : $name;
-					static::log( sprintf( 'Module is "%s".', $module ) );
+					
+					// Some modules include _Adminhtml in the module path (???). That's going to throw everything
+					// else off, but let's not double up. We will not correct the replacement routes for this case,
+					// because that could cause massive conflicts with frontend routes of the same name.
+					if( strpos( $module, '_Adminhtml' ) !== false ) {
+						$module					= str_replace( '_Adminhtml', '', $module );
+						
+						static::log( sprintf( '%s module route already includes _Adminhtml. Admin routes for the module will have to be fixed manually.', $module ), true );
+					}
 					
 					// Build the replacement XML
 					$date					= date('Y-m-d H:i:s');
@@ -181,7 +223,7 @@ USAGE;
 				</args>
 			</adminhtml>
 XML;
-					static::log( sprintf( "XML to be replaced with:\n%s", $newRouteXml ) );
+					static::log( sprintf( "To be replaced with:\n%s", $newRouteXml ) );
 					
 					/**
 					 * If this is not a dry run, apply the changes and save config.xml.
@@ -194,16 +236,27 @@ XML;
 							static::log('...Done.');
 						}
 						else {
-							static::log( sprintf( 'ERROR: Unable to write new configuration to %s', $configPath ) );
+							static::log( sprintf( 'Unable to write new configuration to %s', $configPath ), true );
 						}
 					}
+					else {
+						$this->_modifiedFiles[] = $configPath;
+					}
+			
+					// Set route replace patterns. We'll change them later if needed.
+					$this->_fileReplacePatterns[ '<action>' . $routeTag . '/adminhtml_' ]	= '<action>adminhtml/';
+					$this->_fileReplacePatterns[ '<' . $routeTag . '_adminhtml_' ]			= '<adminhtml_';
+					$this->_fileReplacePatterns[ 'getUrl("' . $routeTag . '/adminhtml_' ]	= 'getUrl("adminhtml/';
+					$this->_fileReplacePatterns[ "getUrl('" . $routeTag . '/adminhtml_' ]	= "getUrl('adminhtml/";
+					$this->_fileReplacePatterns[ 'getUrl( "' . $routeTag . '/adminhtml_' ]	= 'getUrl( "adminhtml/';
+					$this->_fileReplacePatterns[ "getUrl( '" . $routeTag . '/adminhtml_' ]	= "getUrl( 'adminhtml/";
 				}
 				else {
-					// If not found, module is clean. Disregard.
+					// If the pattern is not found, module is not affected. Move on.
 				}
 			}
 			else {
-				static::log( sprintf( 'Unable to load configuration: %s', $configPath ) );
+				static::log( sprintf( 'Unable to load configuration: %s', $configPath ), true );
 			}
 		}
 		
@@ -211,59 +264,144 @@ XML;
 	}
 	
 	/**
-	 * Attempt to find and fix any admin URLs (routes) affected by the router change.
+	 * Move controllers affected by the router change to avoid route conflicts.
 	 *
 	 * @param string[] $modulePaths Paths to modules to scan for routes.
 	 * @param boolean $dryRun If true, find affected only; do not apply changes.
-	 * @return array Affected files
+	 * @return $this
 	 */
-	protected function _fixBadAdminRoutes( $modulePaths, $dryRun=true )
+	protected function _moveAdminControllers( $modulePaths, $dryRun=true )
 	{
-		$affected = array();
-		
 		foreach( $modulePaths as $route => $modulePath ) {
-			// Find/replace pairs
-			$routePattern	= $route . '/adminhtml';
-			$patterns		= array(
-				'<action>' . $route . '/adminhtml_'		=> '<action>adminhtml/',
-				'getUrl("' . $route . '/adminhtml_'		=> 'getUrl("adminhtml/',
-				"getUrl('" . $route . '/adminhtml_'		=> "getUrl('adminhtml/",
-				'getUrl( "' . $route . '/adminhtml_'	=> 'getUrl( "adminhtml/',
-				"getUrl( '" . $route . '/adminhtml_'	=> "getUrl( 'adminhtml/",
-			);
+			$cleanRoute			= strtolower( preg_replace( '/[^a-zA-Z0-9]/', '', $route ) );
+			$addedRoute			= ucfirst( $cleanRoute );
+			$controllerPath		= $modulePath . DS . 'controllers' . DS . 'Adminhtml';
+			$tmpControllerPath	= $modulePath . DS. 'controllers' . DS . 'Adminhtmltmp';
+			$newControllerPath	= $controllerPath . DS . $addedRoute;
 			
-			$files = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $modulePath ) );
+			if( is_dir( $newControllerPath ) ) {
+				static::log( sprintf( '%s already exists! Skipping.', $newControllerPath ) );
+				continue;
+			}
+			
+			if( !is_dir( $controllerPath ) ) {
+				static::log( sprintf( "%s does not exist! This module's admin routes must be corrected manually.", $controllerPath ), true );
+				continue;
+			}
+			
+			if( $dryRun === true ) {
+				continue;
+			}
+			
+			// First, rename Adminhtml to somthing nonconflicting (Adminhtmltmp)
+			// Then create new Adminhtml
+			// Then rename Adminhtmltmp to Adminhtml/{$addedRoute}
+			if( rename( $controllerPath, $tmpControllerPath ) === true ) {
+				if( mkdir( $controllerPath ) === true ) {
+					if( rename( $tmpControllerPath, $newControllerPath ) === true ) {
+						static::log( sprintf( 'Moved %s to %s', $controllerPath, $newControllerPath ) );
+					}
+					else {
+						static::log( sprintf( 'Unable to move %s to %s', $tmpControllerPath, $newControllerPath ), true );
+						continue;
+					}
+				}
+				else {
+					static::log( sprintf( 'Unable to create %s', $controllerPath ), true );
+					continue;
+				}
+			}
+			else {
+				static::log( sprintf( 'Unable to rename %s', $controllerPath ), true );
+				continue;
+			}
+			
+			// H'okay. That's done. Now fix all of the class names we just broke, and set up the string replacements.
+			// Start by building the class prefix from the folder path. Should pass the module through instead.
+			$folders	= explode( DS, $modulePath );
+			$moduleName	= array_pop( $folders );
+			$vendorName	= array_pop( $folders );
+			$oldClassPrefix = $vendorName . '_' . $moduleName . '_Adminhtml_'; // WAS: Vendor_Module_Adminhtml_, route {route}/adminhtml_
+			$newClassPrefix = $oldClassPrefix . $addedRoute . '_'; // NOW: Vendor_Module_Adminhtml_Route_, route adminhtml/{route}_
+			
+			// We're not going to replace these immediately. We'll add them to an array with all other patterns,
+			// then scan the entire codebase in one swoop to get everything fixed up. Better for handling dependencies
+			// and module files we don't necessarily know the location of.
+			$this->_fileReplacePatterns[ 'class ' . $oldClassPrefix ] = 'class ' . $newClassPrefix;
+			$this->_fileReplacePatterns[ 'extends ' . $oldClassPrefix ] = 'extends ' . $newClassPrefix;
+			
+			// Reset route replace patterns with the new controller path.
+			$this->_fileReplacePatterns[ '<action>' . $route . '/adminhtml_' ]	= '<action>adminhtml/' . $cleanRoute . '_';
+			$this->_fileReplacePatterns[ '<' . $route . '_adminhtml_' ]			= '<adminhtml_' . $cleanRoute . '_';
+			$this->_fileReplacePatterns[ 'getUrl("' . $route . '/adminhtml_' ]	= 'getUrl("adminhtml/' . $cleanRoute . '_';
+			$this->_fileReplacePatterns[ "getUrl('" . $route . '/adminhtml_' ]	= "getUrl('adminhtml/" . $cleanRoute . '_';
+			$this->_fileReplacePatterns[ 'getUrl( "' . $route . '/adminhtml_' ]	= 'getUrl( "adminhtml/' . $cleanRoute . '_';
+			$this->_fileReplacePatterns[ "getUrl( '" . $route . '/adminhtml_' ]	= "getUrl( 'adminhtml/" . $cleanRoute . '_';
+		}
+		
+		return $this;
+	}
+	
+	/**
+	 * Attempt to find and fix any admin URLs (routes) affected by the router change.
+	 *
+	 * @param boolean $dryRun If true, find affected only; do not apply changes.
+	 * @return $this
+	 */
+	protected function _fixBadAdminRoutes( $dryRun=true )
+	{
+		$scanPaths = array(
+			Mage::getBaseDir('code'),
+			Mage::getBaseDir('design') . DS . 'adminhtml',
+		);
+		
+		/**
+		 * Trudge through the filesystem.
+		 */
+		foreach( $scanPaths as $scanPath ) {
+			/**
+			 * For each file within this path...
+			 */
+			$files = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $scanPath ) );
 			foreach( $files as $file => $object ) {
-				// Skip any non-PHP/XML files.
-				if( strpos( $file, '.php' ) === false && strpos( $file, '.xml' ) === false ) {
+				// Skip any non-PHP/XML/PHTML files.
+				if( strrpos( $file, '.php' ) === false && strrpos( $file, '.xml' ) === false && strrpos( $file, '.phtml' ) === false ) {
 					continue;
 				}
 				
-				// Scan the file for our patterns, replace any found.
-				$fileContents = file_get_contents( $file );
-				if( strpos( $fileContents, $routePattern ) !== false ) {
-					static::log( sprintf( 'Checking %s', $file ) );
-					
-					$lines		= explode( "\n", $fileContents );
-					$changes	= false;
-					
-					foreach( $lines as $key => $line ) {
-						if( strpos( $line, $routePattern ) !== false ) {
-							foreach( $patterns as $pattern => $replacement ) {
-								if( strpos( $line, $pattern ) !== false ) {
-									$lines[ $key ]	= str_replace( $pattern, $replacement, $line );
-									$changes		= true;
-								}
-							}
-							
-							if( $line != $lines[ $key ] ) {
-								static::log( sprintf( '  WAS:%s', $line ) );
-								static::log( sprintf( '  NOW:%s', $lines[ $key ] ) );
-							}
+				$fileContents	= file_get_contents( $file );
+				$lines			= explode( "\n", $fileContents );
+				$changes		= false;
+				
+				/**
+				 * Scan the file line-by-line for each pattern.
+				 */
+				foreach( $lines as $key => $line ) {
+					foreach( $this->_fileReplacePatterns as $pattern => $replacement ) {
+						if( strpos( $line, $pattern ) !== false ) {
+							$lines[ $key ] = str_replace( $pattern, $replacement, $line );
 						}
 					}
 					
-					if( $dryRun === false && $changes === true ) {
+					/**
+					 * If this line has any changes, record it.
+					 */
+					if( $line != $lines[ $key ] ) {
+						if( $changes === false ) {
+							static::log( $file );
+							$changes = true;
+						}
+						
+						static::log( sprintf( '  WAS:%s', $line ) );
+						static::log( sprintf( '  NOW:%s', $lines[ $key ] ) );
+					}
+				}
+				
+				/**
+				 * If the file has been modified, record it and save.
+				 */
+				if( $changes === true ) {
+					if( $dryRun === false ) {
 						$fileContents = implode( "\n", $lines );
 						
 						if( file_put_contents( $file, $fileContents ) !== false ) {
@@ -271,14 +409,17 @@ XML;
 							// Silence!
 						}
 						else {
-							static::log( sprintf( 'ERROR: Unable to write new configuration to %s', $configPath ) );
+							static::log( sprintf( 'Unable to write changes to %s', $file ), true );
 						}
+					}
+					else {
+						$this->_modifiedFiles[] = $file;
 					}
 				}
 			}
 		}
 		
-		return $affected;
+		return $this;
 	}
 	
 	/**
@@ -301,11 +442,19 @@ XML;
 	/**
 	 * Write the given message to a log file and to screen.
 	 *
-	 * @param  [type] $message [description]
-	 * @return [type]          [description]
+	 * @param  mixed $message Message to log
+	 * @param  boolean $isError If true, log the error for summary.
+	 * @return void
 	 */
-	public static function log( $message )
+	public static function log( $message, $isError=false )
 	{
+		// Record errors to repeat in the summary.
+		if( $isError === true ) {
+			static::$_errors[] = $message;
+			
+			$message = 'ERROR: ' . $message;
+		}
+		
 		Mage::log( $message, null, 'fixSUPEE6788.log', true );
 		
 		if( !is_string( $message ) ) {
@@ -381,14 +530,14 @@ class TemplateVars
 		$this->walkDir($scan, $localeDir, $list);
 		
 		if(count($list['block']) > 0) {
-			Mage_Shell_PatchClass::log('Found blocks that are not whitelisted:');
+			Mage_Shell_PatchClass::log('Blocks that are not whitelisted:');
 			foreach ($list['block'] as $key => $blockName) {
 				Mage_Shell_PatchClass::log( sprintf( '  %s in %s', $blockName, substr( $key, 0, -1 * strlen($blockName) ) ) );
 			}
 		}
 		
 		if(count($list['variable']) > 0) {
-			Mage_Shell_PatchClass::log('Found template/block variables that are not whitelisted:');
+			Mage_Shell_PatchClass::log('Config variables that are not whitelisted:');
 			foreach ($list['variable'] as $key => $varName) {
 				Mage_Shell_PatchClass::log( sprintf( '  %s in %s', $varName, substr( $key, 0, -1 * strlen($varName) ) ) );
 			}
