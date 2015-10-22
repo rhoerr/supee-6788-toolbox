@@ -113,6 +113,8 @@ class Mage_Shell_PatchClass extends Mage_Shell_Abstract
 			$whitelist = new TemplateVars();
 			$whitelist->execute();
 			
+			sort( $this->_modifiedFiles );
+			
 			static::log('---- Summary ------------------------------------------------------');
 			static::log( sprintf( "Affected Modules:\n  %s", implode( "\n  ", $configAffectedModules ) ) );
 			static::log( sprintf( "Replace Patterns: %s", print_r( $this->_fileReplacePatterns, 1 ) ) );
@@ -217,9 +219,9 @@ USAGE;
 <!-- Route fixed by shell/fixSUPEE6788.php - {$date} -->
 			<adminhtml>
 				<args>
-					 <modules>
-						  <{$routeTag} before="Mage_Adminhtml">{$module}_Adminhtml</{$routeTag}>
-					 </modules>
+					<modules>
+						<{$routeTag} before="Mage_Adminhtml">{$module}_Adminhtml</{$routeTag}>
+					</modules>
 				</args>
 			</adminhtml>
 XML;
@@ -246,6 +248,7 @@ XML;
 					// Set route replace patterns. We'll change them later if needed.
 					$this->_fileReplacePatterns[ '<action>' . $routeTag . '/adminhtml_' ]	= '<action>adminhtml/';
 					$this->_fileReplacePatterns[ '<' . $routeTag . '_adminhtml_' ]			= '<adminhtml_';
+					$this->_fileReplacePatterns[ '</' . $routeTag . '_adminhtml_' ]			= '</adminhtml_';
 					$this->_fileReplacePatterns[ 'getUrl("' . $routeTag . '/adminhtml_' ]	= 'getUrl("adminhtml/';
 					$this->_fileReplacePatterns[ "getUrl('" . $routeTag . '/adminhtml_' ]	= "getUrl('adminhtml/";
 					$this->_fileReplacePatterns[ 'getUrl( "' . $routeTag . '/adminhtml_' ]	= 'getUrl( "adminhtml/';
@@ -289,31 +292,32 @@ XML;
 				continue;
 			}
 			
-			if( $dryRun === true ) {
-				continue;
-			}
-			
-			// First, rename Adminhtml to somthing nonconflicting (Adminhtmltmp)
-			// Then create new Adminhtml
-			// Then rename Adminhtmltmp to Adminhtml/{$addedRoute}
-			if( rename( $controllerPath, $tmpControllerPath ) === true ) {
-				if( mkdir( $controllerPath ) === true ) {
-					if( rename( $tmpControllerPath, $newControllerPath ) === true ) {
-						static::log( sprintf( 'Moved %s to %s', $controllerPath, $newControllerPath ) );
+			if( $dryRun === false ) {
+				// First, rename Adminhtml to somthing nonconflicting (Adminhtmltmp)
+				// Then create new Adminhtml
+				// Then rename Adminhtmltmp to Adminhtml/{$addedRoute}
+				if( rename( $controllerPath, $tmpControllerPath ) === true ) {
+					if( mkdir( $controllerPath ) === true ) {
+						if( rename( $tmpControllerPath, $newControllerPath ) === true ) {
+							static::log( sprintf( 'Moved %s to %s', $controllerPath, $newControllerPath ) );
+						}
+						else {
+							static::log( sprintf( 'Unable to move %s to %s', $tmpControllerPath, $newControllerPath ), true );
+							continue;
+						}
 					}
 					else {
-						static::log( sprintf( 'Unable to move %s to %s', $tmpControllerPath, $newControllerPath ), true );
+						static::log( sprintf( 'Unable to create %s', $controllerPath ), true );
 						continue;
 					}
 				}
 				else {
-					static::log( sprintf( 'Unable to create %s', $controllerPath ), true );
+					static::log( sprintf( 'Unable to rename %s', $controllerPath ), true );
 					continue;
 				}
 			}
 			else {
-				static::log( sprintf( 'Unable to rename %s', $controllerPath ), true );
-				continue;
+				static::log( sprintf( 'Would move %s to %s', $controllerPath, $newControllerPath ) );
 			}
 			
 			// H'okay. That's done. Now fix all of the class names we just broke, and set up the string replacements.
@@ -333,6 +337,7 @@ XML;
 			// Reset route replace patterns with the new controller path.
 			$this->_fileReplacePatterns[ '<action>' . $route . '/adminhtml_' ]	= '<action>adminhtml/' . $cleanRoute . '_';
 			$this->_fileReplacePatterns[ '<' . $route . '_adminhtml_' ]			= '<adminhtml_' . $cleanRoute . '_';
+			$this->_fileReplacePatterns[ '</' . $route . '_adminhtml_' ]		= '</adminhtml_' . $cleanRoute . '_';
 			$this->_fileReplacePatterns[ 'getUrl("' . $route . '/adminhtml_' ]	= 'getUrl("adminhtml/' . $cleanRoute . '_';
 			$this->_fileReplacePatterns[ "getUrl('" . $route . '/adminhtml_' ]	= "getUrl('adminhtml/" . $cleanRoute . '_';
 			$this->_fileReplacePatterns[ 'getUrl( "' . $route . '/adminhtml_' ]	= 'getUrl( "adminhtml/' . $cleanRoute . '_';
