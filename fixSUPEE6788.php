@@ -1,9 +1,7 @@
 <?php
 /**
  * This script attempts to find and automatically resolve major conflicts resulting
- * from the SUPEE-6788 patch. It goes through all modules looking for old-style URLs,
- * and admin email templates, CMS pages, and static blocks looking for non-whitelisted
- * config and block references.
+ * from the SUPEE-6788 patch.
  * 
  * WARNING: This script is destructive. When you apply the changes, it WILL overwrite
  * your existing files with those changes. Back up your site first.
@@ -15,11 +13,7 @@
  * It is meant to minimize the time necessary to diagnose and fix patch conflicts
  * for someone already well-versed in Magento development.
  * 
- * If you need help, give us a line.
- * 
- * Usage:
- * - Upload to shell/fixSUPEE6788.php
- * - Run from SSH: php -f fixSUPEE6788.php
+ * If you need help, let us know.
  * 
  * README:  https://github.com/rhoerr/supee-6788-toolbox/blob/master/README.md
  * LICENSE: https://github.com/rhoerr/supee-6788-toolbox/blob/master/LICENSE
@@ -41,17 +35,17 @@ class Mage_Shell_PatchClass extends Mage_Shell_Abstract
 	protected $_fileReplacePatterns	= array();
 	public static $_errors			= array();
 	
-	protected $_codePools = array(
+	protected $_codePools			= array(
 		'local',
 		'community',
 		'core'
 	);
 	
-	protected $_moduleWhitelist = array(
+	protected $_moduleWhitelist		= array(
 		'Mage_Adminhtml', // Don't try to fix Mage_Adminhtml
 	);
 	
-	protected $_fileWhitelist = array();
+	protected $_fileWhitelist		= array();
 	
 	/**
 	 * Apply PHP settings to shell script
@@ -86,7 +80,7 @@ class Mage_Shell_PatchClass extends Mage_Shell_Abstract
 		
 		if( !is_null( $dryRun ) ) {
 			static::log('-------------------------------------------------------------------');
-			static::log('---- SUPEE-6788 Developer Toolbox ---------------------------------');
+			static::log('---- SUPEE-6788 Developer Toolbox by ParadoxLabs ------------------');
 			static::log('  https://github.com/rhoerr/supee-6788-toolbox');
 			static::log('  Time: ' . date('c'));
 			
