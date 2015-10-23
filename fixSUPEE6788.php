@@ -427,10 +427,24 @@ XML;
 				/**
 				 * Scan the file line-by-line for each pattern.
 				 */
+				$tmpOldPath = '';
+				$tmpNewPath = '';
+				$checkLine  = 0;
 				foreach( $lines as $key => $line ) {
 					foreach( $this->_fileReplacePatterns as $pattern => $replacement ) {
 						if( strpos( $line, $pattern ) !== false ) {
 							$lines[ $key ] = str_replace( $pattern, $replacement, $line );
+						} else if ( strpos( $pattern, 'getUrl' ) !== false && strpos( $line, 'getUrl' ) !== false ) {
+							$tmpOldPath = substr( $pattern, strpos( $pattern, '(' ) + 2 );
+							$tmpNewPath = substr( $replacement, strpos( $replacement, '(' ) + 2 );
+							$checkLine  = $key + 1;
+						}
+
+						if ( $checkLine > 0 && strpos( $line, $tmpOldPath ) !== false && $key == $checkLine ) {
+							$lines[ $key ]  = str_replace( $tmpOldPath, $tmpNewPath, $line );
+							$tmpOldPath     = '';
+							$tmpNewPath     = '';
+							$checkLine      = 0;
 						}
 					}
 					
