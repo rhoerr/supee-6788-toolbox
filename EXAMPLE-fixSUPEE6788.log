@@ -1,0 +1,99 @@
+-------------------------------------------------------------------
+---- SUPEE-6788 Developer Toolbox by ParadoxLabs ------------------
+  https://github.com/rhoerr/supee-6788-toolbox
+  Time: 2015-10-22T20:27:50+00:00
+---- Searching config for bad routers -----------------------------
+Found affected module config.xml: AW_All
+Found route tag 'awall_admin' at 1380, ending at 1585. Original route XML:
+<awall_admin>
+                <use>admin</use>
+                <args>
+                    <module>AW_All</module>
+                    <frontName>awall_admin</frontName>
+                </args>
+            </awall_admin>
+To be replaced with:
+<!-- Route fixed by shell/fixSUPEE6788.php - 2015-10-22 20:27:50 -->
+			<adminhtml>
+				<args>
+					 <modules>
+						  <awall_admin before="Mage_Adminhtml">AW_All_Adminhtml</awall_admin>
+					 </modules>
+				</args>
+			</adminhtml>
+Found affected module config.xml: AW_Shopbybrand
+Found route tag 'awshopbybrand_admin' at 1848, ending at 2077. Original route XML:
+<awshopbybrand_admin>
+                <use>admin</use>
+                <args>
+                    <module>AW_Shopbybrand</module>
+                    <frontName>awshopbybrand_admin</frontName>
+                </args>
+            </awshopbybrand_admin>
+To be replaced with:
+<!-- Route fixed by shell/fixSUPEE6788.php - 2015-10-22 20:27:50 -->
+			<adminhtml>
+				<args>
+					 <modules>
+						  <awshopbybrand_admin before="Mage_Adminhtml">AW_Shopbybrand_Adminhtml</awshopbybrand_admin>
+					 </modules>
+				</args>
+			</adminhtml>
+ERROR: Unable to load configuration: /var/www/html/app/code/local/Custom/Api/etc/config.xml
+---- Moving controllers for bad routers to avoid conflicts --------
+ERROR: /var/www/html/app/code/local/AW/All/controllers/Adminhtml does not exist! This module's admin routes must be corrected manually.
+Would move /var/www/html/app/code/local/AW/Shopbybrand/controllers/Adminhtml to /var/www/html/app/code/local/AW/Shopbybrand/controllers/Adminhtml/Awshopbybrandadmin
+---- Searching files for bad routes -------------------------------
+/var/www/html/app/code/local/AW/Shopbybrand/controllers/Adminhtml/BrandController.php
+  WAS:class AW_Shopbybrand_Adminhtml_BrandController extends Mage_Adminhtml_Controller_Action
+  NOW:class AW_Shopbybrand_Adminhtml_Awshopbybrandadmin_BrandController extends Mage_Adminhtml_Controller_Action
+/var/www/html/app/code/local/AW/Shopbybrand/etc/adminhtml.xml
+  WAS:                                        <action>awshopbybrand_admin/adminhtml_brand/index</action>
+  NOW:                                        <action>adminhtml/awshopbybrandadmin_brand/index</action>
+  WAS:                            <action>awshopbybrand_admin/adminhtml_brand/index</action>
+  NOW:                            <action>adminhtml/awshopbybrandadmin_brand/index</action>
+/var/www/html/app/design/adminhtml/default/default/layout/aw_shopbybrand.xml
+  WAS:    <awshopbybrand_admin_adminhtml_brand_index>
+  NOW:    <adminhtml_awshopbybrandadmin_brand_index>
+  WAS:    <awshopbybrand_admin_adminhtml_brand_edit>
+  NOW:    <adminhtml_awshopbybrandadmin_brand_edit>
+  WAS:    <awshopbybrand_admin_adminhtml_brand_products>
+  NOW:    <adminhtml_awshopbybrandadmin_brand_products>
+  WAS:    <awshopbybrand_admin_adminhtml_brand_productsgrid>
+  NOW:    <adminhtml_awshopbybrandadmin_brand_productsgrid>
+---- Searching for whitelist problems -----------------------------
+Blocks that are not whitelisted:
+  enterprise_catalogevent/event_lister in cms_block=catalog_events_lister
+  company/form_requestapart in cms_page=new-test
+  menubuilder/output in cms_page=test
+---- Summary ------------------------------------------------------
+Affected Modules:
+  /var/www/html/app/code/local/AW/All
+  /var/www/html/app/code/local/AW/Shopbybrand
+Replace Patterns: Array
+(
+    [<action>awall_admin/adminhtml_] => <action>adminhtml/
+    [<awall_admin_adminhtml_] => <adminhtml_
+    [getUrl("awall_admin/adminhtml_] => getUrl("adminhtml/
+    [getUrl('awall_admin/adminhtml_] => getUrl('adminhtml/
+    [getUrl( "awall_admin/adminhtml_] => getUrl( "adminhtml/
+    [getUrl( 'awall_admin/adminhtml_] => getUrl( 'adminhtml/
+    [<action>awshopbybrand_admin/adminhtml_] => <action>adminhtml/awshopbybrandadmin_
+    [<awshopbybrand_admin_adminhtml_] => <adminhtml_awshopbybrandadmin_
+    [getUrl("awshopbybrand_admin/adminhtml_] => getUrl("adminhtml/awshopbybrandadmin_
+    [getUrl('awshopbybrand_admin/adminhtml_] => getUrl('adminhtml/awshopbybrandadmin_
+    [getUrl( "awshopbybrand_admin/adminhtml_] => getUrl( "adminhtml/awshopbybrandadmin_
+    [getUrl( 'awshopbybrand_admin/adminhtml_] => getUrl( 'adminhtml/awshopbybrandadmin_
+    [class AW_Shopbybrand_Adminhtml_] => class AW_Shopbybrand_Adminhtml_Awshopbybrandadmin_
+    [extends AW_Shopbybrand_Adminhtml_] => extends AW_Shopbybrand_Adminhtml_Awshopbybrandadmin_
+)
+Corrected Files:
+  /var/www/html/app/code/local/AW/All/etc/config.xml
+  /var/www/html/app/code/local/AW/Shopbybrand/etc/config.xml
+  /var/www/html/app/code/local/AW/Shopbybrand/controllers/Adminhtml/BrandController.php
+  /var/www/html/app/code/local/AW/Shopbybrand/etc/adminhtml.xml
+  /var/www/html/app/design/adminhtml/default/default/layout/aw_shopbybrand.xml
+Errors:
+  Unable to load configuration: /var/www/html/app/code/local/Custom/Api/etc/config.xml
+  /var/www/html/app/code/local/AW/All/controllers/Adminhtml does not exist! This module's admin routes must be corrected manually.
+See var/log/fixSUPEE6788.log for a record of all results.
