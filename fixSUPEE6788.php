@@ -429,22 +429,26 @@ XML;
 				 */
 				$oldUrlPath = '';
 				$newUrlPath = '';
-				$checkLine  = 0;
+				$checkLine  = -1;
 				foreach( $lines as $key => $line ) {
 					foreach( $this->_fileReplacePatterns as $pattern => $replacement ) {
 						if( strpos( $line, $pattern ) !== false ) {
 							$lines[ $key ] = str_replace( $pattern, $replacement, $line );
 						} else if ( $checkLine !== $key && strpos( $pattern, 'getUrl' ) !== false && strpos( $line, 'getUrl' ) !== false ) {
+							// Handle multi-line getUrl syntax. cf. https://github.com/rhoerr/supee-6788-toolbox/pull/1
 							$oldUrlPath = substr( $pattern, strcspn($pattern, '"\'') + 1 );
 							$newUrlPath = substr( $replacement, strcspn($replacement, '"\'') + 1 );
-							$checkLine = ( strlen($oldUrlPath) > 0 && strlen($newUrlPath ) > 0 ) ? $key + 1 : 0;
+							$checkLine  = ( strlen($oldUrlPath) > 0 && strlen($newUrlPath ) > 0 ) ? $key + 1 : -1;
 						}
 
-						if ( $checkLine > 0 && strpos( $line, $oldUrlPath ) !== false && $key == $checkLine ) {
-							$lines[ $key ]  = str_replace( $oldUrlPath, $newUrlPath, $line );
+						if ( $key == $checkLine ) {
+							if( strpos( $line, $oldUrlPath ) !== false ) {
+								$lines[ $key ] = str_replace( $oldUrlPath, $newUrlPath, $line );
+							}
+							
 							$oldUrlPath     = '';
 							$newUrlPath     = '';
-							$checkLine      = 0;
+							$checkLine      = -1;
 						}
 					}
 					
