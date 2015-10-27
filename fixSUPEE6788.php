@@ -248,8 +248,7 @@ USAGE;
 					// Build the replacement XML
 					$date					= date('Y-m-d H:i:s');
 					$newRouteXml			= <<<XML
-<!-- Route fixed by shell/fixSUPEE6788.php - {$date} -->
-			<adminhtml>
+<adminhtml>
 				<args>
 					<modules>
 						<{$routeTag} before="Mage_Adminhtml">{$module}_Adminhtml</{$routeTag}>
