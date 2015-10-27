@@ -19,11 +19,21 @@ If you need help, let us know. Contact details at the bottom.
 * Upload fixSUPEE6788.php to {magento}/shell/fixSUPEE6788.php
 * **To analyze:** Run from SSH: `php -f fixSUPEE6788.php -- analyze`
 * **To apply changes:** Run from SSH: `php -f fixSUPEE6788.php -- fix`
+* **To fix missing whitelist entries only:** Run from SSH: `php -f fixSUPEE6788.php -- fixWhitelists`
 * Additional option: `recordAffected` - If given, two files will be written after running: `var/log/fixSUPEE6788-modules.log` containing all modules affected by the patch, and `var/log/fixSUPEE6788-files.log` containing all files the script would/did modify. Use this to grab an archive of modified files (`tar czf modified.tar.gz -T var/log/fixSUPEE6788-files.log`), or weed out any files/modules for the fix whitelist.
-* Additional option: `loadWhitelists` - If given, `shell/fixSUPEE6788-whitelist-modules.log` and `shell/fixSUPEE6788-whitelist-files.log` will be loaded, and any files/modules mentioned will be excluded. Format should be identical to the files produced by `recordAffected`.
-* Command with options: `php -f fixSUPEE6788.php -- analyze recordAffected loadWhitelists`
+* Excluding files and modules: If given, `shell/fixSUPEE6788-whitelist-modules.log` and `shell/fixSUPEE6788-whitelist-files.log` will be loaded, and any files/modules included will be left out of all analysis and fixes. Format should be identical to the files produced by `recordAffected`.
+* Command with options: `php -f fixSUPEE6788.php -- analyze recordAffected`
 
 All results are output to screen and to var/log/fixSUPEE6788.log.
+
+## Technical Details
+For a rundown of conflicting changes from the SUPEE-6788 patch, see the [technical details brief](http://magento.com/security/patches/supee-6788-technical-details) and discussion on [Magento StackExchange](http://magento.stackexchange.com/questions/87214/how-to-check-which-modules-are-affected-by-security-patch-supee-6788/).
+
+There are four points of interest outlined.
+1. **APPSEC-1034**, bypassing custom admin URL: This script addresses this by identifying any affected modules (containing `<use>admin</use>`), and outlines the exact code changes necessary to fix each one. It can apply all of those changes for you if desired.
+2. **APPSEC-1063**, possible SQL injection: This script attempts to identify any such cases by checking all modules and templates for a specific REGEX pattern. Any instances found must be analyzed (and if needed, fixed) manually. (Thanks @timvroom) NOTE: There is no guarantee that all possible instances will be found, nor that all instances found will be affected.
+3. **APPSEC-1057**, information exposure: The patch adds a whitelist of specific blocks and settings accessible in CMS pages, static blocks, and email templates. This script scans all affected content looking for any entries not on the whitelist. It can add all missing entries to the whitelist if desired.
+4. **APPSEC-1079**, potential exploit with PHP opjects in product custom options: This script does not address this change. Any custom code dealing with custom options must be evaluated manually for impact.
 
 ## Caveats
 * Script assumes admin controllers are all located within {module}/controllers/Adminhtml. This is convention, but not always true.
@@ -32,8 +42,6 @@ All results are output to screen and to var/log/fixSUPEE6788.log.
 
 ## Potential improvements
 * Ability to flag extensions known to be affected by the SQL vulnerability or other changes, or somehow otherwise detect it.
-* Load whitelist entries for analysis from the Magento config/block whitelist. *(Need details on how they're stored to do this.)*
-* Add any missing cache/block whitelist entries to the whitelist during `fix`. *(Need details on how they're stored to do this.)*
 * Documentation on how to resolve the various errors and edge cases that might occur.
 
 ## Who we are

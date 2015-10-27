@@ -84,10 +84,8 @@ class Mage_Shell_PatchClass extends Mage_Shell_Abstract
 			static::log('  https://github.com/rhoerr/supee-6788-toolbox');
 			static::log('  Time: ' . date('c'));
 			
-			if( isset( $this->_args['loadWhitelists'] ) ) {
-				static::log('---- Loading whitelists -------------------------------------------');
-				$this->_loadWhitelistsFromFile();
-			}
+			static::log('---- Loading whitelists -------------------------------------------');
+			$this->_loadWhitelistsFromFile();
 			
 			$this->_findModules();
 			
@@ -103,15 +101,14 @@ class Mage_Shell_PatchClass extends Mage_Shell_Abstract
 			
 			static::log('---- Searching for whitelist problems -----------------------------');
 			$whitelist = new TemplateVars();
-			$whitelist->execute();
+			$whitelist->execute( ( $dryRun || isset( $this->_args['fixWhitelists'] ) ) );
 			
 			sort( $this->_modifiedFiles );
 			
 			static::log('---- Summary ------------------------------------------------------');
 			static::log( sprintf( "Affected Modules:\n  %s", implode( "\n  ", $configAffectedModules ) ) );
-			static::log( sprintf( "Replace Patterns: %s", print_r( $this->_fileReplacePatterns, 1 ) ) );
-			static::log( sprintf( "Corrected Files:\n  %s", implode( "\n  ", $this->_modifiedFiles ) ) );
-			static::log( sprintf( "Errors:\n  %s", implode( "\n  ", static::$_errors ) ) );
+			static::log( sprintf( "Affected Files:\n  %s", implode( "\n  ", $this->_modifiedFiles ) ) );
+			static::log( sprintf( "Issues:\n  %s", implode( "\n  ", static::$_errors ) ) );
 			static::log('See var/log/fixSUPEE6788.log for a record of all results.');
 			
 			if( isset( $this->_args['recordAffected'] ) ) {
@@ -141,12 +138,14 @@ class Mage_Shell_PatchClass extends Mage_Shell_Abstract
 	public function usageHelp()
 	{
 		return <<<USAGE
-Usage:  php -f fixSUPEE6788.php -- [options]
+Usage:  php -f fixSUPEE6788.php -- [options] [recordAffected]
   analyze           Analyze Magento install for SUPEE-6788 conflicts
   fix               Apply the automated fixes as found by analyze
-  recordAffected    If given, affected will be written to var/log/fixSUPEE6788-modules.log and var/log/fixSUPEE6788-files.log for other uses.
-  loadWhitelists    If given, shell/fixSUPEE6788-whitelist-modules.log and shell/fixSUPEE6788-whitelist-files.log will be loaded and excluded from any changes. Format same as recordAffected output.
-  help              This help
+  fixWhitelists     Add any missing whitelist entries, without any other changes. SUPEE-6788 must be applied first.
+  
+  recordAffected    If given, affected modules/files will be written to var/log/fixSUPEE6788-modules.log and var/log/fixSUPEE6788-files.log for other uses.
+  
+  For all cases, shell/fixSUPEE6788-whitelist-modules.log and shell/fixSUPEE6788-whitelist-files.log will be loaded and excluded from analysis/changes if they exist. Format same as recordAffected output.
 
 USAGE;
 	}
@@ -211,7 +210,7 @@ USAGE;
 				$match		= strpos( $config, '<use>admin</use>' );
 				
 				if( $match !== false ) {
-					static::log( sprintf( 'Found affected module config.xml: %s', $name ) );
+					static::log( sprintf( 'Found affected module: %s', $name ) );
 					
 					/**
 					 * Attempt to locate the complete route tag for replacement.
@@ -229,7 +228,7 @@ USAGE;
 					$routeEndingTag			= strpos( $config, '</' . $routeTag .'>', $routeStartingTag );
 					$routeLength			= $routeEndingTag - $routeStartingTag + strlen( $routeTag ) + 3;
 					$originalXml			= substr( $config, $routeStartingTag, $routeLength );
-					static::log( sprintf( "Found route tag '%s' at %s, ending at %s. Original route XML:\n%s", $routeTag, $routeStartingTag, $routeEndingTag, $originalXml ) );
+					static::log( sprintf( "Found route tag '%s'. Original route XML:\n%s", $routeTag, $originalXml ) );
 					
 					// Get the module value
 					$module					= null;
@@ -452,6 +451,14 @@ XML;
 					}
 					
 					/**
+					 * Check for APPSEC-1057 - Thanks @timvroom
+					 */
+					if( preg_match( '/addFieldToFilter\(\s*[\'"]?[\`\(]/i', $line ) ) {
+						static::log( sprintf( 'POSSIBLE SQL VULNERABILITY: %s:%s', $file, $key ), true );
+						static::log( sprintf( '  CODE:%s', $line ) );
+					}
+					
+					/**
 					 * If this line has any changes, record it.
 					 */
 					if( $line != $lines[ $key ] ) {
@@ -548,6 +555,11 @@ $shell->run();
  */
 class TemplateVars
 {
+	/**
+	 * Default whitelist entries. Used if not able to load from DB.
+	 *
+	 * @var array
+	 */
 	protected static $varsWhitelist = array(
 		'web/unsecure/base_url',
 		'web/secure/base_url',
@@ -565,35 +577,92 @@ class TemplateVars
 		'general/store_information/phone',
 		'general/store_information/address',
 	);
-	
 	protected static $blocksWhitelist = array(
 		'core/template',
 		'catalog/product_new',
+		'enterprise_catalogevent/event_lister',
 	);
+	
+	protected $_resource;
+	protected $_read;
+	protected $_write;
+	
+	protected $_blocksTable;
+	protected $_varsTable;
+	
+	/**
+	 * Initialize: Load whitelist entries from the database if possible.
+	 */
+	public function __construct()
+	{
+		$this->_resource	= Mage::getSingleton('core/resource');
+		$this->_read		= $this->_resource->getConnection('core_read');
+		$this->_write		= $this->_resource->getConnection('core_write');
+		
+		try {
+			$this->_blocksTable	= $this->_resource->getTableName('admin/permission_block');
+			if( $this->_read->isTableExists( $this->_blocksTable ) )
+			{
+				$this->blocksWhitelist = array();
+				
+				$sql				= "SELECT * FROM " . $this->_blocksTable . " WHERE is_allowed=1";
+				$permissions		= $this->_read->fetchAll( $sql );
+				foreach( $permissions as $permission ) {
+					$this->blocksWhitelist[] = $permission['block_name'];
+				}
+			}
+			else {
+				$this->_blocksTable	= null;
+			}
+		}
+		catch( Exception $e ) {
+			// Exception means the whitelist doesn't exist yet, or we otherwise failed to read it in. That's okay. Move on.
+			$this->_blocksTable	= null;
+		}
+		
+		try {
+			$this->_varsTable		= $this->_resource->getTableName('admin/permission_variable');
+			if( $this->_read->isTableExists( $this->_varsTable ) )
+			{
+				$this->varsWhitelist = array();
+				
+				$sql				= "SELECT * FROM " . $this->_varsTable . " WHERE is_allowed=1";
+				$permissions		= $this->_read->fetchAll( $sql );
+				foreach( $permissions as $permission ) {
+					$this->varsWhitelist[] = $permission['variable_name'];
+				}
+			}
+			else {
+				$this->_varsTable	= null;
+			}
+		}
+		catch( Exception $e ) {
+			// Exception means the whitelist doesn't exist yet, or we otherwise failed to read it in. That's okay. Move on.
+			$this->_varsTable	= null;
+		}
+	}
 	
 	/**
 	 * @return void
 	 */
-	public function execute()
+	public function execute( $dryRun=true )
 	{
-		$resource			= Mage::getSingleton('core/resource');
-		$db					= $resource->getConnection('core_read');
-		$cmsBlockTable		= $resource->getTableName('cms/block');
-		$cmsPageTable		= $resource->getTableName('cms/page');
-		$emailTemplate		= $resource->getTableName('core/email_template');
+		$cmsBlockTable		= $this->_resource->getTableName('cms/block');
+		$cmsPageTable		= $this->_resource->getTableName('cms/page');
+		$emailTemplate		= $this->_resource->getTableName('core/email_template');
 		
 		$sql				= "SELECT %s FROM %s WHERE %s LIKE '%%{{config %%' OR  %s LIKE '%%{{block %%'";
 		$list				= array('block' => array(), 'variable' => array());
 		$cmsCheck			= sprintf($sql, 'content, concat("cms_block=",identifier) as id', $cmsBlockTable, 'content', 'content');
-		$result				= $db->fetchAll($cmsCheck);
+		$result				= $this->_read->fetchAll($cmsCheck);
 		$this->check($result, 'content', $list);
 		
 		$cmsCheck			= sprintf($sql, 'content, concat("cms_page=",identifier) as id', $cmsPageTable, 'content', 'content');
-		$result				= $db->fetchAll($cmsCheck);
+		$result				= $this->_read->fetchAll($cmsCheck);
 		$this->check($result, 'content', $list);
 		
 		$emailCheck			= sprintf($sql, 'template_text, concat("core_email_template=",template_code) as id', $emailTemplate, 'template_text', 'template_text');
-		$result				= $db->fetchAll($emailCheck);
+		$result				= $this->_read->fetchAll($emailCheck);
 		$this->check($result, 'template_text', $list);
 		
 		$localeDir			= Mage::getBaseDir('locale');
@@ -605,12 +674,48 @@ class TemplateVars
 			foreach ($list['block'] as $key => $blockName) {
 				Mage_Shell_PatchClass::log( sprintf( '  %s in %s', $blockName, substr( $key, 0, -1 * strlen($blockName) ) ) );
 			}
+			
+			if( $dryRun === false && !is_null( $this->_blocksTable ) ) {
+				$keys		= array_unique( array_keys( $list['block'] ) );
+				$inserts	= array();
+				
+				foreach( $keys as $key => $blockName ) {
+					$inserts[] = array(
+						'block_name' => substr( $key, 0, -1 * strlen($blockName) ),
+						'is_allowed' => 1,
+					);
+				}
+				
+				if( count( $inserts ) > 0 ) {
+					$this->_write->insertMultiple( $this->_blocksTable, $inserts );
+				}
+				
+				Mage_Shell_PatchClass::log('Added missing entries to the whitelist');
+			}
 		}
 		
 		if(count($list['variable']) > 0) {
 			Mage_Shell_PatchClass::log('Config variables that are not whitelisted:');
 			foreach ($list['variable'] as $key => $varName) {
 				Mage_Shell_PatchClass::log( sprintf( '  %s in %s', $varName, substr( $key, 0, -1 * strlen($varName) ) ) );
+			}
+			
+			if( $dryRun === false && !is_null( $this->_varsTable ) ) {
+				$keys		= array_unique( array_keys( $list['variable'] ) );
+				$inserts	= array();
+				
+				foreach( $keys as $key => $varName ) {
+					$inserts[] = array(
+						'variable_name' => substr( $key, 0, -1 * strlen($varName) ),
+						'is_allowed'    => 1,
+					);
+				}
+				
+				if( count( $inserts ) > 0 ) {
+					$this->_write->insertMultiple( $this->_varsTable, $inserts );
+				}
+				
+				Mage_Shell_PatchClass::log('Added missing entries to the whitelist');
 			}
 		}
 	}
