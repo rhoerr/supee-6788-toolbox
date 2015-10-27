@@ -30,9 +30,10 @@ All results are output to screen and to var/log/fixSUPEE6788.log.
 For a rundown of conflicting changes from the SUPEE-6788 patch, see the [technical details brief](http://magento.com/security/patches/supee-6788-technical-details) and discussion on [Magento StackExchange](http://magento.stackexchange.com/questions/87214/how-to-check-which-modules-are-affected-by-security-patch-supee-6788/).
 
 There are four points of interest outlined.
-1. **APPSEC-1034**, bypassing custom admin URL: This script addresses this by identifying any affected modules (containing `<use>admin</use>`), and outlines the exact code changes necessary to fix each one. It can apply all of those changes for you if desired.
-2. **APPSEC-1063**, possible SQL injection: This script attempts to identify any such cases by checking all modules and templates for a specific REGEX pattern. Any instances found must be analyzed (and if needed, fixed) manually. (Thanks @timvroom) NOTE: There is no guarantee that all possible instances will be found, nor that all instances found will be affected.
-3. **APPSEC-1057**, information exposure: The patch adds a whitelist of specific blocks and settings accessible in CMS pages, static blocks, and email templates. This script scans all affected content looking for any entries not on the whitelist. It can add all missing entries to the whitelist if desired.
+
+1. **APPSEC-1034**, bypassing custom admin URL: This script addresses this by identifying any affected modules (containing `<use>admin</use>`), and outlines the exact code changes necessary to fix each one. It can apply all of those changes for you if desired.  
+2. **APPSEC-1063**, possible SQL injection: This script attempts to identify any such cases by checking all modules and templates for a specific REGEX pattern. Any instances found must be analyzed (and if needed, fixed) manually. (Thanks @timvroom) NOTE: There is no guarantee that all possible instances will be found, nor that all instances found will be affected.  
+3. **APPSEC-1057**, information exposure: The patch adds a whitelist of specific blocks and settings accessible in CMS pages, static blocks, and email templates. This script scans all affected content looking for any entries not on the whitelist. It can add all missing entries to the whitelist if desired.  
 4. **APPSEC-1079**, potential exploit with PHP opjects in product custom options: This script does not address this change. Any custom code dealing with custom options must be evaluated manually for impact.
 
 ## Caveats
