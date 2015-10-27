@@ -101,7 +101,7 @@ class Mage_Shell_PatchClass extends Mage_Shell_Abstract
 			
 			static::log('---- Searching for whitelist problems -----------------------------');
 			$whitelist = new TemplateVars();
-			$whitelist->execute( ( $dryRun || isset( $this->_args['fixWhitelists'] ) ) );
+			$whitelist->execute( $dryRun );
 			
 			sort( $this->_modifiedFiles );
 			
@@ -124,6 +124,16 @@ class Mage_Shell_PatchClass extends Mage_Shell_Abstract
 				);
 				static::log('Wrote affected files to var/log/fixSUPEE6788-files.log');
 			}
+		}
+		elseif( !is_null( $this->_args['fixWhitelists'] ) ) {
+			static::log('-------------------------------------------------------------------');
+			static::log('---- SUPEE-6788 Developer Toolbox by ParadoxLabs ------------------');
+			static::log('  https://github.com/rhoerr/supee-6788-toolbox');
+			static::log('  Time: ' . date('c'));
+			
+			static::log('---- Searching for whitelist problems -----------------------------');
+			$whitelist = new TemplateVars();
+			$whitelist->execute( false );
 		}
 		else {
 			echo $this->usageHelp();
@@ -603,12 +613,12 @@ class TemplateVars
 			$this->_blocksTable	= $this->_resource->getTableName('admin/permission_block');
 			if( $this->_read->isTableExists( $this->_blocksTable ) )
 			{
-				$this->blocksWhitelist = array();
+				self::$blocksWhitelist = array();
 				
 				$sql				= "SELECT * FROM " . $this->_blocksTable . " WHERE is_allowed=1";
 				$permissions		= $this->_read->fetchAll( $sql );
 				foreach( $permissions as $permission ) {
-					$this->blocksWhitelist[] = $permission['block_name'];
+					self::$blocksWhitelist[] = $permission['block_name'];
 				}
 			}
 			else {
@@ -624,12 +634,12 @@ class TemplateVars
 			$this->_varsTable		= $this->_resource->getTableName('admin/permission_variable');
 			if( $this->_read->isTableExists( $this->_varsTable ) )
 			{
-				$this->varsWhitelist = array();
+				self::$varsWhitelist = array();
 				
 				$sql				= "SELECT * FROM " . $this->_varsTable . " WHERE is_allowed=1";
 				$permissions		= $this->_read->fetchAll( $sql );
 				foreach( $permissions as $permission ) {
-					$this->varsWhitelist[] = $permission['variable_name'];
+					self::$varsWhitelist[] = $permission['variable_name'];
 				}
 			}
 			else {
@@ -671,24 +681,20 @@ class TemplateVars
 		
 		if(count($list['block']) > 0) {
 			Mage_Shell_PatchClass::log('Blocks that are not whitelisted:');
+			
+			$inserts	= array();
+			
 			foreach ($list['block'] as $key => $blockName) {
 				Mage_Shell_PatchClass::log( sprintf( '  %s in %s', $blockName, substr( $key, 0, -1 * strlen($blockName) ) ) );
+				
+				$inserts[ $blockName ] = array(
+					'block_name' => $blockName,
+					'is_allowed' => 1,
+				);
 			}
 			
-			if( $dryRun === false && !is_null( $this->_blocksTable ) ) {
-				$keys		= array_unique( array_keys( $list['block'] ) );
-				$inserts	= array();
-				
-				foreach( $keys as $key => $blockName ) {
-					$inserts[] = array(
-						'block_name' => substr( $key, 0, -1 * strlen($blockName) ),
-						'is_allowed' => 1,
-					);
-				}
-				
-				if( count( $inserts ) > 0 ) {
-					$this->_write->insertMultiple( $this->_blocksTable, $inserts );
-				}
+			if( $dryRun === false && !is_null( $this->_blocksTable ) && count( $inserts ) > 0 ) {
+				$this->_write->insertMultiple( $this->_blocksTable, array_values( $inserts ) );
 				
 				Mage_Shell_PatchClass::log('Added missing entries to the whitelist');
 			}
@@ -696,24 +702,20 @@ class TemplateVars
 		
 		if(count($list['variable']) > 0) {
 			Mage_Shell_PatchClass::log('Config variables that are not whitelisted:');
+			
+			$inserts	= array();
+			
 			foreach ($list['variable'] as $key => $varName) {
 				Mage_Shell_PatchClass::log( sprintf( '  %s in %s', $varName, substr( $key, 0, -1 * strlen($varName) ) ) );
+				
+				$inserts[ $varName ] = array(
+					'variable_name' => $varName,
+					'is_allowed'    => 1,
+				);
 			}
 			
-			if( $dryRun === false && !is_null( $this->_varsTable ) ) {
-				$keys		= array_unique( array_keys( $list['variable'] ) );
-				$inserts	= array();
-				
-				foreach( $keys as $key => $varName ) {
-					$inserts[] = array(
-						'variable_name' => substr( $key, 0, -1 * strlen($varName) ),
-						'is_allowed'    => 1,
-					);
-				}
-				
-				if( count( $inserts ) > 0 ) {
-					$this->_write->insertMultiple( $this->_varsTable, $inserts );
-				}
+			if( $dryRun === false && !is_null( $this->_varsTable ) && count( $inserts ) > 0 ) {
+				$this->_write->insertMultiple( $this->_varsTable, array_values( $inserts ) );
 				
 				Mage_Shell_PatchClass::log('Added missing entries to the whitelist');
 			}
