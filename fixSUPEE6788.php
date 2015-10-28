@@ -469,7 +469,7 @@ XML;
 					}
 					
 					/**
-					 * Check for APPSEC-1057 - Thanks @timvroom
+					 * Check for APPSEC-1063 - Thanks @timvroom
 					 */
 					if( preg_match( '/addFieldToFilter\(\s*[\'"]?[\`\(]/i', $line ) ) {
 						static::log( sprintf( 'POSSIBLE SQL VULNERABILITY: %s:%s', $file, $key ), true );
