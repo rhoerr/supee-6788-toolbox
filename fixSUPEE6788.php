@@ -238,6 +238,13 @@ USAGE;
 					$routeEndingTag			= strpos( $config, '</' . $routeTag .'>', $routeStartingTag );
 					$routeLength			= $routeEndingTag - $routeStartingTag + strlen( $routeTag ) + 3;
 					$originalXml			= substr( $config, $routeStartingTag, $routeLength );
+					
+					// Sanity check: Route XML should be no more than 400 characters. (250 typical) Route tag should not be more than 40.
+					if( $routeLength > 400 || strlen( $routeTag ) > 40 ) {
+						static::log( sprintf( 'Could not find route tag in %s. The module will have to be fixed manually.', $configPath ), true );
+						continue;
+					}
+					
 					static::log( sprintf( "Found route tag '%s'. Original route XML:\n%s", $routeTag, $originalXml ) );
 					
 					// Get the module value
@@ -279,6 +286,7 @@ XML;
 						}
 						else {
 							static::log( sprintf( 'Unable to write new configuration to %s', $configPath ), true );
+							continue;
 						}
 					}
 					else {

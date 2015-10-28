@@ -2,7 +2,7 @@
 
 Magento's SUPEE-6788 patch is a mess for developers. There are a number of breaking changes, affecting 800+ of the most popular extensions and many customizations.
 
-This script attempts to find and automatically resolve major problems from the patch. It does this in two stages: `analyze`, and `fix`.
+This script attempts to find and automatically resolve major problems from the patch. Details on usage and internals are below, but at a high level:
 
 The `analyze` step goes through all extensions looking for anything using custom admin routers (the major outdated change), and produces a list of every module affected, the bad XML and PHP code, and exactly what should be changed to resolve it. It also looks at every CMS page, static block, and email template for any blocks or configuration that are not known to be on the new whitelist. All of this is purely informational, to inform you of the state of the Magento installation and what will be involved in fixing it.
 
@@ -26,6 +26,10 @@ If you need help, let us know. Contact details at the bottom.
 
 All results are output to screen and to var/log/fixSUPEE6788.log.
 
+We recommend patching your site in two phases: First, apply the SUPEE-6788 patch and immediately run this script with the `fixWhitelists` flag to fix any functionality broken by the whitelist changes. (Verify that all entries added should in fact be there.) Then, run this script with `analyze` and/or `fix` to correct controller conflicts. Verify all is well, then disable the admin controller compatibility mode.
+
+After patching, scan with [MageReport.com](https://www.magereport.com/) to confirm your site is up to date.
+
 ## Technical Details
 For a rundown of conflicting changes from the SUPEE-6788 patch, see the [technical details brief](http://magento.com/security/patches/supee-6788-technical-details) and discussion on [Magento StackExchange](http://magento.stackexchange.com/questions/87214/how-to-check-which-modules-are-affected-by-security-patch-supee-6788/).
 
@@ -40,10 +44,6 @@ There are four points of interest outlined.
 * Script assumes admin controllers are all located within {module}/controllers/Adminhtml. This is convention, but not always true.
 * Script will not handle multiple admin routes in a single module.
 * The script may not catch all possible route formats. The automated changes may result in broken admin pages that must be corrected manually.
-
-## Potential improvements
-* Ability to flag extensions known to be affected by the SQL vulnerability or other changes, or somehow otherwise detect it.
-* Documentation on how to resolve the various errors and edge cases that might occur.
 
 ## Who we are
 This script is provided as a courtesy from ParadoxLabs. We created it to help with applying our own patches, and we're sharing it so you can benefit too. We are a Magento Silver Solution Partner, based out of Lancaster, Pennsylvania USA.
