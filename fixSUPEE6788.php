@@ -431,6 +431,11 @@ XML;
 					continue;
 				}
 				
+				// Skip any files inside .svn directories
+				if( strrpos( $file, '.svn') !== false) {
+					continue;
+				}
+				
 				// Skip any whitelisted files.
 				if( in_array( $file, $this->_fileWhitelist ) ) {
 					continue;
