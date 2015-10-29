@@ -668,6 +668,7 @@ class TemplateVars
 		$cmsBlockTable		= $this->_resource->getTableName('cms/block');
 		$cmsPageTable		= $this->_resource->getTableName('cms/page');
 		$emailTemplate		= $this->_resource->getTableName('core/email_template');
+        $coreConfigDataTable = $this->_resource->getTableName('core/config_data');
 		
 		$sql				= "SELECT %s FROM %s WHERE %s LIKE '%%{{config %%' OR  %s LIKE '%%{{block %%'";
 		$list				= array('block' => array(), 'variable' => array());
@@ -682,6 +683,10 @@ class TemplateVars
 		$emailCheck			= sprintf($sql, 'template_text, concat("core_email_template=",template_code) as id', $emailTemplate, 'template_text', 'template_text');
 		$result				= $this->_read->fetchAll($emailCheck);
 		$this->check($result, 'template_text', $list);
+
+		$configCheck		= sprintf($sql, 'value, concat("config_path=",path) as id', $coreConfigDataTable, 'value', 'value');
+		$result				= $this->_read->fetchAll($configCheck);
+		$this->check($result, 'value', $list);
 		
 		$localeDir			= Mage::getBaseDir('locale');
 		$scan				= scandir($localeDir);
@@ -705,6 +710,20 @@ class TemplateVars
 				$this->_write->insertMultiple( $this->_blocksTable, array_values( $inserts ) );
 				
 				Mage_Shell_PatchClass::log('Added missing entries to the whitelist');
+
+				$insertStr = '';
+				foreach($inserts as $value){
+					$insertStr .= "\n        array('block_name' => '{$value['block_name']}', 'is_allowed' => 1),";
+				}
+				Mage_Shell_PatchClass::log('
+$installer = $this;
+$installer->startSetup();
+$installer->getConnection()->insertMultiple(
+    $installer->getTable(\'admin/permission_block\'),
+    array(' . $insertStr . ')
+);
+$installer->endSetup();
+');
 			}
 		}
 		
@@ -726,6 +745,20 @@ class TemplateVars
 				$this->_write->insertMultiple( $this->_varsTable, array_values( $inserts ) );
 				
 				Mage_Shell_PatchClass::log('Added missing entries to the whitelist');
+
+				$insertStr = '';
+				foreach($inserts as $value){
+					$insertStr .= "\n        array('variable_name' => '{$value['variable_name']}', 'is_allowed' => 1),";
+				}
+				Mage_Shell_PatchClass::log('
+$installer = $this;
+$installer->startSetup();
+$installer->getConnection()->insertMultiple(
+	$installer->getTable(\'admin/permission_variable\'),
+	array(' . $insertStr . ')
+);
+$installer->endSetup();
+');
 			}
 		}
 	}
