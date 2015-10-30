@@ -88,42 +88,43 @@ class Mage_Shell_PatchClass extends Mage_Shell_Abstract
 			$this->_loadWhitelistsFromFile();
 			
 			$this->_findModules();
-			
-			static::log('---- Searching config for bad routers -----------------------------');
-			
-			$configAffectedModules	= $this->_fixBadAdminhtmlRouter( $dryRun );
-			
-			static::log('---- Moving controllers for bad routers to avoid conflicts --------');
-			$this->_moveAdminControllers( $configAffectedModules, $dryRun );
-			
-			static::log('---- Searching files for bad routes -------------------------------');
-			$this->_fixBadAdminRoutes( $dryRun );
-			
+			if (!isset($this->_args['ignoreAdminRoutes'])){
+				static::log('---- Searching config for bad routers -----------------------------');
+
+				$configAffectedModules	= $this->_fixBadAdminhtmlRouter( $dryRun );
+
+				static::log('---- Moving controllers for bad routers to avoid conflicts --------');
+				$this->_moveAdminControllers( $configAffectedModules, $dryRun );
+
+				static::log('---- Searching files for bad routes -------------------------------');
+				$this->_fixBadAdminRoutes( $dryRun );
+
+				sort( $this->_modifiedFiles );
+
+				static::log('---- Summary ------------------------------------------------------');
+				static::log( sprintf( "Affected Modules:\n  %s", implode( "\n  ", $configAffectedModules ) ) );
+				static::log( sprintf( "Affected Files:\n  %s", implode( "\n  ", $this->_modifiedFiles ) ) );
+				static::log( sprintf( "Issues:\n  %s", implode( "\n  ", static::$_errors ) ) );
+				static::log('See var/log/fixSUPEE6788.log for a record of all results.');
+
+				if( isset( $this->_args['recordAffected'] ) ) {
+					file_put_contents(
+						Mage::getBaseDir('var') . DS . 'log' . DS . 'fixSUPEE6788-modules.log',
+						implode( "\n", $configAffectedModules )
+					);
+					static::log('Wrote affected modules to var/log/fixSUPEE6788-modules.log');
+
+					file_put_contents(
+						Mage::getBaseDir('var') . DS . 'log' . DS . 'fixSUPEE6788-files.log',
+						implode( "\n", $this->_modifiedFiles )
+					);
+					static::log('Wrote affected files to var/log/fixSUPEE6788-files.log');
+				}
+			}
 			static::log('---- Searching for whitelist problems -----------------------------');
 			$whitelist = new TemplateVars();
 			$whitelist->execute( $dryRun );
-			
-			sort( $this->_modifiedFiles );
-			
-			static::log('---- Summary ------------------------------------------------------');
-			static::log( sprintf( "Affected Modules:\n  %s", implode( "\n  ", $configAffectedModules ) ) );
-			static::log( sprintf( "Affected Files:\n  %s", implode( "\n  ", $this->_modifiedFiles ) ) );
-			static::log( sprintf( "Issues:\n  %s", implode( "\n  ", static::$_errors ) ) );
-			static::log('See var/log/fixSUPEE6788.log for a record of all results.');
-			
-			if( isset( $this->_args['recordAffected'] ) ) {
-				file_put_contents(
-					Mage::getBaseDir('var') . DS . 'log' . DS . 'fixSUPEE6788-modules.log',
-					implode( "\n", $configAffectedModules )
-				);
-				static::log('Wrote affected modules to var/log/fixSUPEE6788-modules.log');
-				
-				file_put_contents(
-					Mage::getBaseDir('var') . DS . 'log' . DS . 'fixSUPEE6788-files.log',
-					implode( "\n", $this->_modifiedFiles )
-				);
-				static::log('Wrote affected files to var/log/fixSUPEE6788-files.log');
-			}
+
 		}
 		elseif( !is_null( $this->_args['fixWhitelists'] ) ) {
 			static::log('-------------------------------------------------------------------');
@@ -154,6 +155,7 @@ Usage:  php -f fixSUPEE6788.php -- [options] [recordAffected]
   fixWhitelists     Add any missing whitelist entries, without any other changes. SUPEE-6788 must be applied first.
   
   recordAffected    If given, affected modules/files will be written to var/log/fixSUPEE6788-modules.log and var/log/fixSUPEE6788-files.log for other uses.
+  ignoreAdminRoutes    do not analyze or fix admin route issue APPSEC-1034
   
   For all cases, shell/fixSUPEE6788-whitelist-modules.log and shell/fixSUPEE6788-whitelist-files.log will be loaded and excluded from analysis/changes if they exist. Format same as recordAffected output.
 
@@ -537,6 +539,9 @@ XML;
 			
 			// Skip any whitelisted modules.
 			if( !in_array( $name, $this->_moduleWhitelist ) && !in_array( $dir, $this->_moduleWhitelist ) ) {
+				if ((!is_dir($dir) || is_link($dir)) && is_dir(realpath($dir))){
+					$dir = realpath($dir);
+				}
 				$this->_modules[ $name ] = $dir;
 			}
 		}
@@ -695,6 +700,7 @@ class TemplateVars
 		$this->walkDir($scan, $localeDir, $list);
 		
 		if(count($list['block']) > 0) {
+			$setupScriptVariables = array();
 			Mage_Shell_PatchClass::log('Blocks that are not whitelisted:');
 			
 			$inserts	= array();
@@ -706,6 +712,7 @@ class TemplateVars
 					'block_name' => $blockName,
 					'is_allowed' => 1,
 				);
+				$setupScriptVariables[] = $blockName;
 			}
 			
 			if( $dryRun === false && !is_null( $this->_blocksTable ) && count( $inserts ) > 0 ) {
@@ -713,13 +720,31 @@ class TemplateVars
 				
 				Mage_Shell_PatchClass::log('Added missing entries to the whitelist');
 			}
+			//blocks detected during dry run
+			elseif ($setupScriptVariables){
+				$content = '$blocksToAllow = ' . var_export($setupScriptVariables ,true) . ";\n\n";
+				$content.= <<<scriptContent
+foreach (\$blocksToAllow as \$blockName) {
+	//collection load avoids duplicate creation if setup script is executed multiple times
+	Mage::getModel('admin/block')
+    ->getCollection()
+    ->addFieldToFilter('block_name',\$blockName)
+    ->getFirstItem()
+    ->setBlockName(\$blockName)
+    ->setIsAllowed(true)
+    ->save();
+}
+scriptContent;
+				Mage_Shell_PatchClass::log("Add following as setup script \n\n" . $content . "\n");
+
+			}
 		}
 		
 		if(count($list['variable']) > 0) {
 			Mage_Shell_PatchClass::log('Config variables that are not whitelisted:');
 			
 			$inserts	= array();
-			
+			$setupScriptVariables = array();
 			foreach ($list['variable'] as $key => $varName) {
 				Mage_Shell_PatchClass::log( sprintf( '  %s in %s', $varName, substr( $key, 0, -1 * strlen($varName) ) ) );
 				
@@ -727,12 +752,31 @@ class TemplateVars
 					'variable_name' => $varName,
 					'is_allowed'    => 1,
 				);
+				$setupScriptVariables[] = $varName;
 			}
 			
 			if( $dryRun === false && !is_null( $this->_varsTable ) && count( $inserts ) > 0 ) {
 				$this->_write->insertMultiple( $this->_varsTable, array_values( $inserts ) );
 				
 				Mage_Shell_PatchClass::log('Added missing entries to the whitelist');
+			}
+			elseif ($setupScriptVariables){
+				$content = '$variablesToAllow = ' . var_export($setupScriptVariables ,true) . ";\n\n";
+				Mage::getModel('admin/variable')->load();
+				$content.= <<<scriptContent
+foreach (\$variablesToAllow as \$variableName) {
+	//collection load avoids duplicate creation if setup script is executed multiple times
+	Mage::getModel('admin/variable')
+    ->getCollection()
+    ->addFieldToFilter('variable_name',\$variableName)
+    ->getFirstItem()
+    ->setBlockName(\$variableName)
+    ->setIsAllowed(true)
+    ->save();
+}
+scriptContent;
+				Mage_Shell_PatchClass::log("Add following as setup script \n\n" . $content . "\n");
+
 			}
 		}
 	}
