@@ -444,6 +444,16 @@ XML;
 				$fileContents	= file_get_contents( $file );
 				$lines			= explode( "\n", $fileContents );
 				$changes		= false;
+
+				/**
+				 * Check for APPSEC-1063 - Thanks @timvroom
+				 */
+				if( preg_match_all( '/addFieldToFilter[\n\r\s]*\([\n\r\s]*[\'"]?[\`\(]/i', $fileContents, $matches ) ) {
+					static::log( sprintf( 'POSSIBLE SQL VULNERABILITY: %s', $file ), true );
+					foreach($matches[0] as $m) {
+						static::log( sprintf( '  CODE:%s', $m ) );
+					}
+				}
 				
 				/**
 				 * Scan the file line-by-line for each pattern.
@@ -471,14 +481,6 @@ XML;
 							$newUrlPath     = '';
 							$checkLine      = -1;
 						}
-					}
-					
-					/**
-					 * Check for APPSEC-1063 - Thanks @timvroom
-					 */
-					if( preg_match( '/addFieldToFilter\(\s*[\'"]?[\`\(]/i', $line ) ) {
-						static::log( sprintf( 'POSSIBLE SQL VULNERABILITY: %s:%s', $file, $key ), true );
-						static::log( sprintf( '  CODE:%s', $line ) );
 					}
 					
 					/**
