@@ -88,7 +88,10 @@ class Mage_Shell_PatchClass extends Mage_Shell_Abstract
 			$this->_loadWhitelistsFromFile();
 			
 			$this->_findModules();
-			if (!isset($this->_args['ignoreAdminRoutes'])){
+			if (isset($this->_args['ignoreAdminRoutes'])) {
+				$this->_showUnescapedFields($dryRun);
+			}
+			else{
 				static::log('---- Searching config for bad routers -----------------------------');
 
 				$configAffectedModules	= $this->_fixBadAdminhtmlRouter( $dryRun );
@@ -405,20 +408,14 @@ XML;
 		
 		return $this;
 	}
-	
-	/**
-	 * Attempt to find and fix any admin URLs (routes) affected by the router change.
-	 *
-	 * @param boolean $dryRun If true, find affected only; do not apply changes.
-	 * @return $this
-	 */
-	protected function _fixBadAdminRoutes( $dryRun=true )
+
+	public function loopLines($dryRun, $lineCallBack)
 	{
 		$scanPaths = array(
 			Mage::getBaseDir('code'),
 			Mage::getBaseDir('design') . DS . 'adminhtml',
 		);
-		
+
 		/**
 		 * Trudge through the filesystem.
 		 */
@@ -432,94 +429,148 @@ XML;
 				if( strrpos( $file, '.php' ) === false && strrpos( $file, '.xml' ) === false && strrpos( $file, '.phtml' ) === false ) {
 					continue;
 				}
-				
+
 				// Skip any files inside .svn directories
 				if( strrpos( $file, '.svn') !== false) {
 					continue;
 				}
-				
+
 				// Skip any whitelisted files.
 				if( in_array( $file, $this->_fileWhitelist ) ) {
 					continue;
 				}
-				
+
 				$fileContents	= file_get_contents( $file );
 				$lines			= explode( "\n", $fileContents );
-				$changes		= false;
-				
-				/**
-				 * Scan the file line-by-line for each pattern.
-				 */
-				$oldUrlPath = '';
-				$newUrlPath = '';
-				$checkLine  = -1;
-				foreach( $lines as $key => $line ) {
-					foreach( $this->_fileReplacePatterns as $pattern => $replacement ) {
-						if( strpos( $line, $pattern ) !== false ) {
-							$lines[ $key ] = str_replace( $pattern, $replacement, $line );
-						} else if ( $checkLine !== $key && strpos( $pattern, 'getUrl' ) !== false && strpos( $line, 'getUrl' ) !== false ) {
-							// Handle multi-line getUrl syntax. cf. https://github.com/rhoerr/supee-6788-toolbox/pull/1
-							$oldUrlPath = substr( $pattern, strcspn($pattern, '"\'') + 1 );
-							$newUrlPath = substr( $replacement, strcspn($replacement, '"\'') + 1 );
-							$checkLine  = ( strlen($oldUrlPath) > 0 && strlen($newUrlPath ) > 0 ) ? $key + 1 : -1;
-						}
-
-						if ( $key == $checkLine ) {
-							if( strpos( $line, $oldUrlPath ) !== false ) {
-								$lines[ $key ] = str_replace( $oldUrlPath, $newUrlPath, $line );
-							}
-							
-							$oldUrlPath     = '';
-							$newUrlPath     = '';
-							$checkLine      = -1;
-						}
-					}
-					
-					/**
-					 * Check for APPSEC-1063 - Thanks @timvroom
-					 */
-					if( preg_match( '/addFieldToFilter\(\s*[\'"]?[\`\(]/i', $line ) ) {
-						static::log( sprintf( 'POSSIBLE SQL VULNERABILITY: %s:%s', $file, $key ), true );
-						static::log( sprintf( '  CODE:%s', $line ) );
-					}
-					
-					/**
-					 * If this line has any changes, record it.
-					 */
-					if( $line != $lines[ $key ] ) {
-						if( $changes === false ) {
-							static::log( $file );
-							$changes = true;
-						}
-						
-						static::log( sprintf( '  WAS:%s', $line ) );
-						static::log( sprintf( '  NOW:%s', $lines[ $key ] ) );
-					}
+				if (!is_array($lineCallBack) || is_callable($lineCallBack)) {
+					$lineCallBack = array($lineCallBack);
 				}
-				
-				/**
-				 * If the file has been modified, record it and save.
-				 */
-				if( $changes === true ) {
-					if( $dryRun === false ) {
-						$fileContents = implode( "\n", $lines );
-						
-						if( file_put_contents( $file, $fileContents ) !== false ) {
-							$this->_modifiedFiles[] = $file;
-							// Silence!
-						}
-						else {
-							static::log( sprintf( 'Unable to write changes to %s', $file ), true );
-						}
-					}
-					else {
-						$this->_modifiedFiles[] = $file;
+				foreach ($lineCallBack as $callBack) {
+					if (is_callable($callBack)) {
+						$args = array($dryRun, $lines, $file);
+						call_user_func_array($callBack, $args);
 					}
 				}
 			}
 		}
-		
+	}
+
+	/**
+	 * call back to display already escaped calls to addFieldToFilter
+	 * @param $dryRun
+	 * @param $lines
+	 * @param $file
+	 */
+	public function displayEscapedFields($dryRun, $lines, $file)
+	{
+		foreach ($lines as $key => $line) {
+			/**
+			 * Check for APPSEC-1063 - Thanks @timvroom
+			 */
+			if( preg_match( '/addFieldToFilter\(\s*[\'"]?[\`\(]/i', $line ) ) {
+				static::log( sprintf( 'POSSIBLE SQL VULNERABILITY: %s:%s', $file, $key ), true );
+				static::log( sprintf( '  CODE:%s', $line ) );
+			}
+		}
+	}
+
+	/**
+	 * Call back to fix Admin Routes
+	 * @param $dryRun
+	 * @param $lines
+	 * @param $file
+	 */
+	public function fixAdminRouteCallBack($dryRun, $lines, $file)
+	{
+		$changes = false;
+
+		/**
+		 * Scan the file line-by-line for each pattern.
+		 */
+		$oldUrlPath = '';
+		$newUrlPath = '';
+		$checkLine = -1;
+		foreach ($lines as $key => $line) {
+			foreach ($this->_fileReplacePatterns as $pattern => $replacement) {
+				if (strpos($line, $pattern) !== false) {
+					$lines[$key] = str_replace($pattern, $replacement, $line);
+				}
+				else if ($checkLine !== $key && strpos($pattern, 'getUrl') !== false && strpos($line, 'getUrl') !== false) {
+					// Handle multi-line getUrl syntax. cf. https://github.com/rhoerr/supee-6788-toolbox/pull/1
+					$oldUrlPath = substr($pattern, strcspn($pattern, '"\'') + 1);
+					$newUrlPath = substr($replacement, strcspn($replacement, '"\'') + 1);
+					$checkLine = (strlen($oldUrlPath) > 0 && strlen($newUrlPath) > 0) ? $key + 1 : -1;
+				}
+
+				if ($key == $checkLine) {
+					if (strpos($line, $oldUrlPath) !== false) {
+						$lines[$key] = str_replace($oldUrlPath, $newUrlPath, $line);
+					}
+
+					$oldUrlPath = '';
+					$newUrlPath = '';
+					$checkLine = -1;
+				}
+			}
+
+			/**
+			 * If this line has any changes, record it.
+			 */
+			if ($line != $lines[$key]) {
+				if ($changes === false) {
+					static::log($file);
+					$changes = true;
+				}
+
+				static::log(sprintf('  WAS:%s', $line));
+				static::log(sprintf('  NOW:%s', $lines[$key]));
+			}
+		}
+
+		/**
+		 * If the file has been modified, record it and save.
+		 */
+		if ($changes === true) {
+			if ($dryRun === false) {
+				$fileContents = implode("\n", $lines);
+
+				if (file_put_contents($file, $fileContents) !== false) {
+					$this->_modifiedFiles[] = $file;
+					// Silence!
+				}
+				else {
+					static::log(sprintf('Unable to write changes to %s', $file), true);
+				}
+			}
+			else {
+				$this->_modifiedFiles[] = $file;
+			}
+		}
+	}
+	/**
+	 * Attempt to find and fix any admin URLs (routes) affected by the router change.
+	 *
+	 * @param boolean $dryRun If true, find affected only; do not apply changes.
+	 * @return $this
+	 */
+	protected function _fixBadAdminRoutes( $dryRun=true )
+	{
+		$adminRouteCallBack = (array($this,'fixAdminRouteCallBack'));
+		$escapedFieldsCallBack = (array($this,'displayEscapedFields'));
+
+		$callBack = array($adminRouteCallBack, $escapedFieldsCallBack);
+		$this->loopLines($dryRun,$callBack);
 		return $this;
+	}
+
+	/**
+	 * Display already escaped calls to addFieldToFilter
+	 * @param $dryRun
+	 */
+	protected function _showUnescapedFields($dryRun)
+	{
+		$escapedFieldsCallBack = (array($this,'displayEscapedFields'));
+		$this->loopLines($dryRun,$escapedFieldsCallBack);
 	}
 	
 	/**
@@ -537,7 +588,10 @@ XML;
 			
 			// Skip any whitelisted modules.
 			if( !in_array( $name, $this->_moduleWhitelist ) && !in_array( $dir, $this->_moduleWhitelist ) ) {
-				if ((!is_dir($dir) || is_link($dir)) && is_dir(realpath($dir))){
+				if (isset($this->_modules[ $name ])){
+					continue;
+				}
+				if (is_dir(realpath($dir)) && ((is_link($dir)) || ($dir != realpath($dir))) ){
 					$dir = realpath($dir);
 				}
 				$this->_modules[ $name ] = $dir;
