@@ -812,7 +812,7 @@ class TemplateVars
 					'block_name' => $blockName,
 					'is_allowed' => 1,
 				);
-				$setupScriptVariables[] = $blockName;
+				$setupScriptVariables[$blockName] = $blockName;
 			}
 			
 			if( $dryRun === false && !is_null( $this->_blocksTable ) && count( $inserts ) > 0 ) {
@@ -822,7 +822,10 @@ class TemplateVars
 			}
 			//blocks detected during dry run
 			elseif ($setupScriptVariables){
-				$content = '$blocksToAllow = ' . var_export($setupScriptVariables ,true) . ";\n\n";
+				$variableString = var_export(array_values($setupScriptVariables) ,true);
+				//strip numeric keys 1=> 'value
+				$variableString = preg_replace("/[0-9]+ \=\>/i", '', $variableString);
+				$content = '$blocksToAllow = ' . $variableString . ";\n\n";
 				$content.= <<<scriptContent
 foreach (\$blocksToAllow as \$blockName) {
 	//collection load avoids duplicate creation if setup script is executed multiple times
@@ -852,7 +855,7 @@ scriptContent;
 					'variable_name' => $varName,
 					'is_allowed'    => 1,
 				);
-				$setupScriptVariables[] = $varName;
+				$setupScriptVariables[$varName] = $varName;
 			}
 			
 			if( $dryRun === false && !is_null( $this->_varsTable ) && count( $inserts ) > 0 ) {
@@ -861,7 +864,10 @@ scriptContent;
 				Mage_Shell_PatchClass::log('Added missing entries to the whitelist');
 			}
 			elseif ($setupScriptVariables){
-				$content = '$variablesToAllow = ' . var_export($setupScriptVariables ,true) . ";\n\n";
+				$variableString = var_export(array_values($setupScriptVariables) ,true);
+				//strip numeric keys 1=> 'value
+				$variableString = preg_replace("/[0-9]+ \=\>/i", '', $variableString);
+				$content = '$variablesToAllow = ' . $variableString . ";\n\n";
 				Mage::getModel('admin/variable')->load();
 				$content.= <<<scriptContent
 foreach (\$variablesToAllow as \$variableName) {
