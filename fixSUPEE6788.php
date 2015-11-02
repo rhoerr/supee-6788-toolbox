@@ -127,6 +127,7 @@ class Mage_Shell_PatchClass extends Mage_Shell_Abstract
 			static::log('---- Searching for whitelist problems -----------------------------');
 			$whitelist = new TemplateVars();
 			$whitelist->execute( $dryRun );
+			$this->_fixTemplateIssues();
 
 		}
 		elseif( !is_null( $this->_args['fixWhitelists'] ) ) {
@@ -409,12 +410,15 @@ XML;
 		return $this;
 	}
 
-	public function loopLines($dryRun, $lineCallBack)
+	public function loopLines($dryRun, $lineCallBack, $scanPaths = array())
 	{
-		$scanPaths = array(
-			Mage::getBaseDir('code'),
-			Mage::getBaseDir('design') . DS . 'adminhtml',
-		);
+		if (!$scanPaths){
+			$scanPaths = array(
+				Mage::getBaseDir('code'),
+				Mage::getBaseDir('design') . DS . 'adminhtml',
+			);
+		}
+
 
 		/**
 		 * Trudge through the filesystem.
@@ -447,7 +451,7 @@ XML;
 				}
 				foreach ($lineCallBack as $callBack) {
 					if (is_callable($callBack)) {
-						$args = array($dryRun, $lines, $file);
+						$args = array($dryRun, $lines, $fileContents, $file);
 						call_user_func_array($callBack, $args);
 					}
 				}
@@ -461,7 +465,7 @@ XML;
 	 * @param $lines
 	 * @param $file
 	 */
-	public function displayEscapedFields($dryRun, $lines, $file)
+	public function displayEscapedFieldsCallBack($dryRun, $lines, $fileContents, $file)
 	{
 		foreach ($lines as $key => $line) {
 			/**
@@ -475,12 +479,56 @@ XML;
 	}
 
 	/**
+	 * display code where form keys are missing
+	 *
+	 * @param $dryRun
+	 * @param $lines
+	 * @param $file
+	 */
+	public function formKeysCallBack($dryRun, $lines, $fileContents, $file)
+	{
+		if (!strpos($file,'template/persistent/customer/form/register.phtml')){
+			return ;
+		}
+		if (strpos($fileContents,'getSuccessUrl') && !(strpos($fileContents,'getFormKey'))){
+			static::log( sprintf( 'POSSIBLE MISSING FORMKEYS: %s', $file ), true );
+		}
+	}
+
+	/**
+	 * display code which is still using setResetPasswordLinkToken or getResetPasswordLinkToken
+	 *
+	 * @param $dryRun
+	 * @param $lines
+	 * @param $file
+	 */
+	public function passwordTokenCallBack($dryRun, $lines, $fileContents, $file)
+	{
+		if (strpos($fileContents,'setResetPasswordLinkToken') || (strpos($fileContents,'getResetPasswordLinkToken'))){
+			static::log( sprintf( 'POSSIBLE use of resetPasswordLinkToken : %s', $file ), true );
+		}
+	}
+
+	protected function _fixTemplateIssues( $dryRun=true )
+	{
+		static::log('---- Searching for template issues  -----------------------------');
+		$formsKeysCallBack = (array($this, 'formKeysCallBack'));
+		$passwordTokenCallBack = (array($this, 'passwordTokenCallBack'));
+		$callBack = array($formsKeysCallBack, $passwordTokenCallBack);
+
+		$scanPaths = array(Mage::getBaseDir('design'), Mage::getBaseDir('code'));
+		$this->loopLines($dryRun, $callBack, $scanPaths);
+
+		return $this;
+	}
+
+	/**
 	 * Call back to fix Admin Routes
 	 * @param $dryRun
 	 * @param $lines
 	 * @param $file
 	 */
-	public function fixAdminRouteCallBack($dryRun, $lines, $file)
+	public function fixAdminRouteCallBack($dryRun, $lines, $fileContents, $file)
 	{
 		$changes = false;
 
@@ -556,7 +604,7 @@ XML;
 	protected function _fixBadAdminRoutes( $dryRun=true )
 	{
 		$adminRouteCallBack = (array($this,'fixAdminRouteCallBack'));
-		$escapedFieldsCallBack = (array($this,'displayEscapedFields'));
+		$escapedFieldsCallBack = (array($this,'displayEscapedFieldsCallBack'));
 
 		$callBack = array($adminRouteCallBack, $escapedFieldsCallBack);
 		$this->loopLines($dryRun,$callBack);
@@ -569,7 +617,7 @@ XML;
 	 */
 	protected function _showUnescapedFields($dryRun)
 	{
-		$escapedFieldsCallBack = (array($this,'displayEscapedFields'));
+		$escapedFieldsCallBack = (array($this,'displayEscapedFieldsCallBack'));
 		$this->loopLines($dryRun,$escapedFieldsCallBack);
 	}
 	
