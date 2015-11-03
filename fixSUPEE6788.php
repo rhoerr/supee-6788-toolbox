@@ -505,7 +505,12 @@ XML;
 	public function passwordTokenCallBack($dryRun, $lines, $fileContents, $file)
 	{
 		if (strpos($fileContents,'setResetPasswordLinkToken') || (strpos($fileContents,'getResetPasswordLinkToken'))){
-			static::log( sprintf( 'POSSIBLE use of resetPasswordLinkToken : %s', $file ), true );
+			foreach ($lines as $key => $line) {
+				if (strpos($line,'setResetPasswordLinkToken') || (strpos($line,'getResetPasswordLinkToken'))){
+					static::log( sprintf( 'POSSIBLE use of resetPasswordLinkToken: %s:%s', $file, $key ), true );
+					static::log( sprintf( '  CODE:%s', $line ) );
+				}
+			}
 		}
 	}
 
