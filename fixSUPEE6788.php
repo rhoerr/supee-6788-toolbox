@@ -472,7 +472,7 @@ XML;
 			 * Check for APPSEC-1063 - Thanks @timvroom
 			 */
 			if( preg_match( '/addFieldToFilter\(\s*[\'"]?[\`\(]/i', $line ) ) {
-				static::log( sprintf( 'POSSIBLE SQL VULNERABILITY: %s:%s', $file, $key ), true );
+				static::log( sprintf( 'POSSIBLE SQL VULNERABILITY: %s:%s', $file, $key+1 ), true );
 				static::log( sprintf( '  CODE:%s', $line ) );
 			}
 		}
@@ -487,7 +487,7 @@ XML;
 	 */
 	public function formKeysCallBack($dryRun, $lines, $fileContents, $file)
 	{
-		if (!strpos($file,'template/persistent/customer/form/register.phtml')){
+		if (!strpos($file, 'register.phtml')) {
 			return ;
 		}
 		if (strpos($fileContents,'getSuccessUrl') && !(strpos($fileContents,'getFormKey'))){
@@ -507,7 +507,7 @@ XML;
 		if (strpos($fileContents,'setResetPasswordLinkToken') || (strpos($fileContents,'getResetPasswordLinkToken'))){
 			foreach ($lines as $key => $line) {
 				if (strpos($line,'setResetPasswordLinkToken') || (strpos($line,'getResetPasswordLinkToken'))){
-					static::log( sprintf( 'POSSIBLE use of resetPasswordLinkToken: %s:%s', $file, $key ), true );
+					static::log( sprintf( 'POSSIBLE use of resetPasswordLinkToken: %s:%s', $file, $key+1 ), true );
 					static::log( sprintf( '  CODE:%s', $line ) );
 				}
 			}
