@@ -1,0 +1,15 @@
+{
+    "name": "rhoerr/supee-6788-toolbox",
+    "description": "Analysis/fix tool for extension and customization conflicts resulting from the Magento SUPEE-6788 patch.",
+    "type": "magento-module",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "ParadoxLabs, Inc.",
+            "email": "sales@paradoxlabs.com"
+        }
+    ],
+    "suggest": {
+        "magento-hackathon/magento-composer-installer": "Allows to manage this package as a dependency"
+    }
+}
