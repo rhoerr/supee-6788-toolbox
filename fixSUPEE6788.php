@@ -26,7 +26,7 @@
  * Support: http://support.paradoxlabs.com
  */
 
-require_once 'abstract.php';
+require_once dirname($_SERVER['SCRIPT_NAME']) . DIRECTORY_SEPARATOR . 'abstract.php';
 
 class Mage_Shell_PatchClass extends Mage_Shell_Abstract
 {
