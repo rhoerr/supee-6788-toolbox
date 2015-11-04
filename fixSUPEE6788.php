@@ -46,6 +46,9 @@ class Mage_Shell_PatchClass extends Mage_Shell_Abstract
 	);
 	
 	protected $_fileWhitelist		= array();
+
+	protected $_formKeysIssue = false;
+	protected $_resetPasswordTokenIssue = false;
 	
 	/**
 	 * Apply PHP settings to shell script
@@ -472,7 +475,7 @@ XML;
 			 * Check for APPSEC-1063 - Thanks @timvroom
 			 */
 			if( preg_match( '/addFieldToFilter\(\s*[\'"]?[\`\(]/i', $line ) ) {
-				static::log( sprintf( 'POSSIBLE SQL VULNERABILITY: %s:%s', $file, $key+1 ), true );
+				static::log( sprintf( 'POSSIBLE SQL VULNERABILITY: %s:%s', $this->removeBaseDir($file), $key+1 ), true );
 				static::log( sprintf( '  CODE:%s', $line ) );
 			}
 		}
@@ -491,7 +494,8 @@ XML;
 			return ;
 		}
 		if (strpos($fileContents,'getSuccessUrl') && !(strpos($fileContents,'getFormKey'))){
-			static::log( sprintf( 'POSSIBLE MISSING FORMKEYS: %s', $file ), true );
+			static::log( sprintf( 'POSSIBLE MISSING FORMKEYS: %s', $this->removeBaseDir($file)), true );
+			$this->_formKeysIssue = true;
 		}
 	}
 
@@ -507,11 +511,17 @@ XML;
 		if (strpos($fileContents,'setResetPasswordLinkToken') || (strpos($fileContents,'getResetPasswordLinkToken'))){
 			foreach ($lines as $key => $line) {
 				if (strpos($line,'setResetPasswordLinkToken') || (strpos($line,'getResetPasswordLinkToken'))){
-					static::log( sprintf( 'POSSIBLE use of resetPasswordLinkToken: %s:%s', $file, $key+1 ), true );
+					static::log( sprintf( 'POSSIBLE use of resetPasswordLinkToken: %s:%s', $this->removeBaseDir($file), $key+1 ), true );
 					static::log( sprintf( '  CODE:%s', $line ) );
 				}
 			}
+			$this->_resetPasswordTokenIssue = true;
 		}
+	}
+
+	public function removeBaseDir($file)
+	{
+		return str_replace(Mage::getBaseDir('base') . '/','',$file);
 	}
 
 	protected function _fixTemplateIssues( $dryRun=true )
@@ -523,7 +533,16 @@ XML;
 
 		$scanPaths = array(Mage::getBaseDir('design'), Mage::getBaseDir('code'));
 		$this->loopLines($dryRun, $callBack, $scanPaths);
-
+		if ($this->_formKeysIssue){
+			$message = "Fix Form Keys issue by adding \n"
+					. '  <input type="hidden" name="form_key" value="<?php echo Mage::getSingleton("core/session")->getFormKey() ?>" />';
+			static::log($message);
+		}
+		if ($this->_resetPasswordTokenIssue){
+			$message = "fix Reset password token issue by removing \n"
+				. " , array('_query' => array('id' => \$this->getCustomerId(), 'token' => \$this->getResetPasswordLinkToken()))";
+			static::log($message);
+		}
 		return $this;
 	}
 
