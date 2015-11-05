@@ -675,7 +675,8 @@ class TemplateVars
 		$cmsBlockTable		= $this->_resource->getTableName('cms/block');
 		$cmsPageTable		= $this->_resource->getTableName('cms/page');
 		$emailTemplate		= $this->_resource->getTableName('core/email_template');
-		
+		$configTable		= $this->_resource->getTableName('core/config_data');
+
 		$sql				= "SELECT %s FROM %s WHERE %s LIKE '%%{{config %%' OR  %s LIKE '%%{{block %%'";
 		$list				= array('block' => array(), 'variable' => array());
 		$cmsCheck			= sprintf($sql, 'content, concat("cms_block=",identifier) as id', $cmsBlockTable, 'content', 'content');
@@ -685,11 +686,15 @@ class TemplateVars
 		$cmsCheck			= sprintf($sql, 'content, concat("cms_page=",identifier) as id', $cmsPageTable, 'content', 'content');
 		$result				= $this->_read->fetchAll($cmsCheck);
 		$this->check($result, 'content', $list);
-		
+
 		$emailCheck			= sprintf($sql, 'template_text, concat("core_email_template=",template_code) as id', $emailTemplate, 'template_text', 'template_text');
 		$result				= $this->_read->fetchAll($emailCheck);
 		$this->check($result, 'template_text', $list);
-		
+
+		$configCheck		= sprintf($sql, 'value, concat("path=", path, ", scope=", scope, ", scope_id=", scope_id) as id', $configTable, 'value', 'value');
+		$result				= $this->_read->fetchAll($configCheck);
+		$this->check($result, 'value', $list);
+
 		$localeDir			= Mage::getBaseDir('locale');
 		$scan				= scandir($localeDir);
 		$this->walkDir($scan, $localeDir, $list);
