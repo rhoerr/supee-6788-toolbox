@@ -26,7 +26,7 @@
  * Support: http://support.paradoxlabs.com
  */
 
-require_once 'abstract.php';
+require_once dirname($_SERVER['SCRIPT_NAME']) . DIRECTORY_SEPARATOR . 'abstract.php';
 
 class Mage_Shell_PatchClass extends Mage_Shell_Abstract
 {
@@ -435,6 +435,11 @@ XML;
 					continue;
 				}
 				
+				// Skip any files inside .svn directories
+				if( strrpos( $file, '.svn') !== false) {
+					continue;
+				}
+				
 				// Skip any whitelisted files.
 				if( in_array( $file, $this->_fileWhitelist ) ) {
 					continue;
@@ -443,6 +448,16 @@ XML;
 				$fileContents	= file_get_contents( $file );
 				$lines			= explode( "\n", $fileContents );
 				$changes		= false;
+
+				/**
+				 * Check for APPSEC-1063 - Thanks @timvroom
+				 */
+				if( preg_match_all( '/addFieldToFilter[\n\r\s]*\([\n\r\s]*[\'"]?[\`\(]/i', $fileContents, $matches ) ) {
+					static::log( sprintf( 'POSSIBLE SQL VULNERABILITY: %s', $file ), true );
+					foreach($matches[0] as $m) {
+						static::log( sprintf( '  CODE:%s', $m ) );
+					}
+				}
 				
 				/**
 				 * Scan the file line-by-line for each pattern.
@@ -470,14 +485,6 @@ XML;
 							$newUrlPath     = '';
 							$checkLine      = -1;
 						}
-					}
-					
-					/**
-					 * Check for APPSEC-1063 - Thanks @timvroom
-					 */
-					if( preg_match( '/addFieldToFilter\(\s*[\'"]?[\`\(]/i', $line ) ) {
-						static::log( sprintf( 'POSSIBLE SQL VULNERABILITY: %s:%s', $file, $key ), true );
-						static::log( sprintf( '  CODE:%s', $line ) );
 					}
 					
 					/**
@@ -672,8 +679,8 @@ class TemplateVars
 		$cmsBlockTable		= $this->_resource->getTableName('cms/block');
 		$cmsPageTable		= $this->_resource->getTableName('cms/page');
 		$emailTemplate		= $this->_resource->getTableName('core/email_template');
-		$coreConfigDataTable= $this->_resource->getTableName('core/config_data');
-		
+		$configTable		= $this->_resource->getTableName('core/config_data');
+
 		$sql				= "SELECT %s FROM %s WHERE %s LIKE '%%{{config %%' OR  %s LIKE '%%{{block %%'";
 		$list				= array('block' => array(), 'variable' => array());
 		$cmsCheck			= sprintf($sql, 'content, concat("cms_block=",identifier) as id', $cmsBlockTable, 'content', 'content');
@@ -683,15 +690,15 @@ class TemplateVars
 		$cmsCheck			= sprintf($sql, 'content, concat("cms_page=",identifier) as id', $cmsPageTable, 'content', 'content');
 		$result				= $this->_read->fetchAll($cmsCheck);
 		$this->check($result, 'content', $list);
-		
+
 		$emailCheck			= sprintf($sql, 'template_text, concat("core_email_template=",template_code) as id', $emailTemplate, 'template_text', 'template_text');
 		$result				= $this->_read->fetchAll($emailCheck);
 		$this->check($result, 'template_text', $list);
 
-		$configCheck		= sprintf($sql, 'value, concat("config_path=",path) as id', $coreConfigDataTable, 'value', 'value');
+		$configCheck		= sprintf($sql, 'value, concat("path=", path, ", scope=", scope, ", scope_id=", scope_id) as id', $configTable, 'value', 'value');
 		$result				= $this->_read->fetchAll($configCheck);
 		$this->check($result, 'value', $list);
-		
+
 		$localeDir			= Mage::getBaseDir('locale');
 		$scan				= scandir($localeDir);
 		$this->walkDir($scan, $localeDir, $list);
