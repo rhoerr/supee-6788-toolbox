@@ -532,6 +532,7 @@ XML;
 		$callBack = array($formsKeysCallBack, $passwordTokenCallBack);
 
 		$scanPaths = array(Mage::getBaseDir('design'), Mage::getBaseDir('code'));
+		$scanPaths = $this->addVendorFolderToArray($scanPaths);
 		$this->loopLines($dryRun, $callBack, $scanPaths);
 		if ($this->_formKeysIssue){
 			$message = "Fix Form Keys issue by adding \n"
@@ -642,7 +643,25 @@ XML;
 	protected function _showUnescapedFields($dryRun)
 	{
 		$escapedFieldsCallBack = (array($this,'displayEscapedFieldsCallBack'));
-		$this->loopLines($dryRun,$escapedFieldsCallBack);
+		$scanPaths = array(Mage::getBaseDir('design'), Mage::getBaseDir('code'),);
+		$scanPaths = $this->addVendorFolderToArray($scanPaths);
+		$this->loopLines($dryRun,$escapedFieldsCallBack,$scanPaths);
+	}
+
+	protected function getVendorFolder()
+	{
+		$vendorFolder = dirname(dirname(Mage::getBaseDir('code'))) . '/vendor';
+		$vendorFolder = is_dir($vendorFolder) ? $vendorFolder : false;
+		return $vendorFolder;
+	}
+
+	protected function addVendorFolderToArray($arrayGiven)
+	{
+		$vendorFolder = $this->getVendorFolder();
+		if ($vendorFolder) {
+			$arrayGiven[] = $vendorFolder;
+		}
+		return $arrayGiven;
 	}
 	
 	/**
