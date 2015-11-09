@@ -648,16 +648,20 @@ XML;
 		$this->loopLines($dryRun,$escapedFieldsCallBack,$scanPaths);
 	}
 
-	protected function getVendorFolder()
+	protected function getVendorFolder($vendorFolder)
 	{
-		$vendorFolder = dirname(dirname(Mage::getBaseDir('code'))) . '/vendor';
+		$vendorFolder = dirname(dirname(Mage::getBaseDir('code'))) . '/' . $vendorFolder;
 		$vendorFolder = is_dir($vendorFolder) ? $vendorFolder : false;
 		return $vendorFolder;
 	}
 
 	protected function addVendorFolderToArray($arrayGiven)
 	{
-		$vendorFolder = $this->getVendorFolder();
+		$vendorFolder = $this->getVendorFolder('vendor');
+		if ($vendorFolder) {
+			$arrayGiven[] = $vendorFolder;
+		}
+		$vendorFolder = $this->getVendorFolder('.modman');
 		if ($vendorFolder) {
 			$arrayGiven[] = $vendorFolder;
 		}
