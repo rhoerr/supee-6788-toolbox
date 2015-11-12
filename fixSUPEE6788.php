@@ -301,6 +301,8 @@ XML;
 					$this->_fileReplacePatterns[ "getUrl('" . $routeTag . '/adminhtml_' ]	= "getUrl('adminhtml/";
 					$this->_fileReplacePatterns[ 'getUrl( "' . $routeTag . '/adminhtml_' ]	= 'getUrl( "adminhtml/';
 					$this->_fileReplacePatterns[ "getUrl( '" . $routeTag . '/adminhtml_' ]	= "getUrl( 'adminhtml/";
+					$this->_fileReplacePatterns[ 'this->_redirect("' . $routeTag . '/adminhtml_' ]	= 'this->_redirect("adminhtml/';
+					$this->_fileReplacePatterns[ "this->_redirect('" . $routeTag . '/adminhtml_' ]	= "this->_redirect('adminhtml/";
 				}
 				else {
 					// If the pattern is not found, module is not affected. Move on.
@@ -399,6 +401,8 @@ XML;
 			$this->_fileReplacePatterns[ "getUrl('" . $route . '/adminhtml_' ]	= "getUrl('adminhtml/" . $cleanRoute . '_';
 			$this->_fileReplacePatterns[ 'getUrl( "' . $route . '/adminhtml_' ]	= 'getUrl( "adminhtml/' . $cleanRoute . '_';
 			$this->_fileReplacePatterns[ "getUrl( '" . $route . '/adminhtml_' ]	= "getUrl( 'adminhtml/" . $cleanRoute . '_';
+			$this->_fileReplacePatterns[ 'this->_redirect("' . $route . '/adminhtml_' ]	= 'this->_redirect("adminhtml/' . $cleanRoute . '_';
+			$this->_fileReplacePatterns[ "this->_redirect('" . $route . '/adminhtml_' ]	= "this->_redirect('adminhtml/" . $cleanRoute . '_';
 		}
 		
 		return $this;
@@ -718,6 +722,24 @@ class TemplateVars
 				
 				Mage_Shell_PatchClass::log('Added missing entries to the whitelist');
 			}
+			
+			if (count($inserts) > 0) {
+				$insertStr = '';
+				foreach($inserts as $value){
+					$insertStr .= "\n        array('block_name' => '{$value['block_name']}', 'is_allowed' => 1),";
+				}
+				Mage_Shell_PatchClass::log('
+
+$installer = $this;
+$installer->startSetup();
+$installer->getConnection()->insertMultiple(
+    $installer->getTable(\'admin/permission_block\'),
+    array(' . $insertStr . ')
+);
+$installer->endSetup();
+
+');
+			}
 		}
 		
 		if(count($list['variable']) > 0) {
@@ -738,6 +760,24 @@ class TemplateVars
 				$this->_write->insertMultiple( $this->_varsTable, array_values( $inserts ) );
 				
 				Mage_Shell_PatchClass::log('Added missing entries to the whitelist');
+			}
+			
+			if (count($inserts) > 0) {
+				$insertStr = '';
+				foreach($inserts as $value){
+					$insertStr .= "\n        array('variable_name' => '{$value['variable_name']}', 'is_allowed' => 1),";
+				}
+				Mage_Shell_PatchClass::log('
+
+$installer = $this;
+$installer->startSetup();
+$installer->getConnection()->insertMultiple(
+	$installer->getTable(\'admin/permission_variable\'),
+	array(' . $insertStr . ')
+);
+$installer->endSetup();
+
+');
 			}
 		}
 	}
