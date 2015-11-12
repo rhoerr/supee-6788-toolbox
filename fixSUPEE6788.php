@@ -626,7 +626,7 @@ class TemplateVars
 		
 		try {
 			$this->_blocksTable	= $this->_resource->getTableName('admin/permission_block');
-			if( $this->_read->isTableExists( $this->_blocksTable ) )
+			if( $this->isTableExists( $this->_blocksTable ) )
 			{
 				self::$blocksWhitelist = array();
 				
@@ -647,7 +647,7 @@ class TemplateVars
 		
 		try {
 			$this->_varsTable		= $this->_resource->getTableName('admin/permission_variable');
-			if( $this->_read->isTableExists( $this->_varsTable ) )
+			if( $this->isTableExists( $this->_varsTable ) )
 			{
 				self::$varsWhitelist = array();
 				
@@ -780,5 +780,20 @@ class TemplateVars
 				}
 			}
 		}
+	}
+
+	/**
+	 * Check if database table exists (Compatibility to Magento CE which don't have isTableExists method)
+	 *
+	 * @param string $tableName
+	 * @return boolean
+	 */
+	protected function isTableExists($tableName) {
+		if (true === method_exists($this->_read, 'isTableExists')) {
+			return $this->_read->isTableExists( $tableName );
+		}
+		$dbName = (string) Mage::getConfig()->getNode('global/resources/default_setup/connection/dbname');
+		$sql = "SHOW TABLES WHERE Tables_in_" . $dbName . " = '".$tableName."'";
+		return count($this->_read->fetchAll( $sql )) === 1;
 	}
 }
