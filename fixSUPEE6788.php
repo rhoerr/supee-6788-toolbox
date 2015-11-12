@@ -626,7 +626,7 @@ class TemplateVars
 		
 		try {
 			$this->_blocksTable	= $this->_resource->getTableName('admin/permission_block');
-			if( $this->_read->isTableExists( $this->_blocksTable ) )
+			if( $this->isTableExists( $this->_blocksTable ) )
 			{
 				self::$blocksWhitelist = array();
 				
@@ -647,7 +647,7 @@ class TemplateVars
 		
 		try {
 			$this->_varsTable		= $this->_resource->getTableName('admin/permission_variable');
-			if( $this->_read->isTableExists( $this->_varsTable ) )
+			if( $this->isTableExists( $this->_varsTable ) )
 			{
 				self::$varsWhitelist = array();
 				
@@ -779,6 +779,14 @@ class TemplateVars
 					}
 				}
 			}
+		}
+	}
+
+	protected function isTableExists($table) {
+		if (method_exists($this->_read, 'isTableExists')) {
+			return $this->_read->isTableExists( $table );
+		} else {
+			return in_array($table, $this->_read->listTables());
 		}
 	}
 }
