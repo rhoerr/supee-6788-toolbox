@@ -18,6 +18,7 @@ If you need help, let us know. Contact details at the bottom.
 * Backup your website.
 * Upload fixSUPEE6788.php to {magento}/shell/fixSUPEE6788.php
 * **To analyze:** Run from SSH: `php -f fixSUPEE6788.php -- analyze`
+* **To analyze ignoring admin route:** Run from SSH: `php -f fixSUPEE6788.php -- analyze --ignoreAdminRoute`
 * **To apply changes:** Run from SSH: `php -f fixSUPEE6788.php -- fix`
 * **To fix missing whitelist entries only:** Run from SSH: `php -f fixSUPEE6788.php -- fixWhitelists`
 * Additional option: `recordAffected` - If given, two files will be written after running: `var/log/fixSUPEE6788-modules.log` containing all modules affected by the patch, and `var/log/fixSUPEE6788-files.log` containing all files the script would/did modify. Use this to grab an archive of modified files (`tar czf modified.tar.gz -T var/log/fixSUPEE6788-files.log`), or weed out any files/modules for the fix whitelist.
@@ -44,6 +45,9 @@ There are four points of interest outlined.
 * Script assumes admin controllers are all located within {module}/controllers/Adminhtml. This is convention, but not always true.
 * Script will not handle multiple admin routes in a single module.
 * The script may not catch all possible route formats. The automated changes may result in broken admin pages that must be corrected manually.
+
+## Manual Checks
+* If layout file customer.xml is overwritten make sure overwrite has modified handle `<customer_account_changeforgotten>`
 
 ## Who we are
 This script is provided as a courtesy from ParadoxLabs. We created it to help with applying our own patches, and we're sharing it so you can benefit too. We are a Magento Silver Solution Partner, based out of Lancaster, Pennsylvania USA.
