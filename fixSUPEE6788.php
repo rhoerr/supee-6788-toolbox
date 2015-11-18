@@ -695,6 +695,14 @@ class TemplateVars
 		$result				= $this->_read->fetchAll($configCheck);
 		$this->check($result, 'value', $list);
 
+		// Specific for "Clever CMS" module
+		if ($this->isTableExists('cms_page_tree')) {
+			$cmsPageTreeTable = $this->_resource->getTableName('cms_page_tree');
+			$cmsPageTree = sprintf($sql, 'content, concat("cms_page_tree=",identifier) as id', $cmsPageTreeTable, 'content', 'content');
+			$result = $this->_read->fetchAll($cmsPageTree);
+			$this->check($result, 'content', $list);
+		}
+
 		$localeDir			= Mage::getBaseDir('locale');
 		$scan				= scandir($localeDir);
 		$this->walkDir($scan, $localeDir, $list);
