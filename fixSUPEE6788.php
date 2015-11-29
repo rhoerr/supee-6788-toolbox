@@ -265,12 +265,12 @@ USAGE;
 					$date					= date('Y-m-d H:i:s');
 					$newRouteXml			= <<<XML
 <adminhtml>
-				<args>
-					<modules>
-						<{$routeTag} before="Mage_Adminhtml">{$module}_Adminhtml</{$routeTag}>
-					</modules>
-				</args>
-			</adminhtml>
+    <args>
+        <modules>
+            <{$routeTag} before="Mage_Adminhtml">{$module}_Adminhtml</{$routeTag}>
+        </modules>
+    </args>
+</adminhtml>
 XML;
 					static::log( sprintf( "To be replaced with:\n%s", $newRouteXml ) );
 					
